@@ -1,7 +1,8 @@
 ﻿using System;
 namespace Server {
     public enum MessageAction {
-        SQL_QUERY
+        SQL_QUERY,
+        TEST
     }
 
     public class Message {

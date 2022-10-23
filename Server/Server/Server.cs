@@ -20,7 +20,10 @@ namespace Server {
                 server = listener.Accept();
 
                 Message fromClient = receive();
-                // do something with fromClient
+                if (fromClient != null) {
+                    // do something with fromClient
+                    send(new Message(MessageAction.TEST, ""));
+                }
 
                 //server.Shutdown(SocketShutdown.Both);
                 //server.Close();
@@ -31,7 +34,12 @@ namespace Server {
 
         public static Message parseResponse(string response) {
             string[] parts = response.Split("|");
-            return new Message((MessageAction)Enum.Parse(typeof(MessageAction), parts[0]), parts[1]);
+            MessageAction messageAction;
+            if (Enum.TryParse<MessageAction>(parts[0], out messageAction)) {
+                return new Message(messageAction, parts[1]);
+            } else {
+                return null;
+            }
         }
 
         public static Message receive() {

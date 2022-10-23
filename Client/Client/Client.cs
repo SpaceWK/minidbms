@@ -52,12 +52,15 @@ namespace Client {
                 case 2:
                     Console.Write("Introdu instructiunea SQL: ");
                     var query = Console.ReadLine();
-                    Message message = new Message(MessageAction.SQL_QUERY, query);
-                    send(message);
+                    send(new Message(MessageAction.SQL_QUERY, query));
 
 
                     Message fromServer = receive();
-                    // do something with fromServer
+                    if (fromServer != null) {
+                        if (fromServer.action == MessageAction.TEST) {
+                            menu();
+                        }
+                    }
 
                     break;
                 default:
@@ -68,7 +71,12 @@ namespace Client {
 
         public static Message parseResponse(string response) {
             string[] parts = response.Split("|");
-            return new Message((MessageAction)Enum.Parse(typeof(MessageAction), parts[0]), parts[1]);
+            MessageAction messageAction;
+            if (Enum.TryParse<MessageAction>(parts[0], out messageAction)) {
+                return new Message(messageAction, parts[1]);
+            } else {
+                return null;
+            }
         }
 
         public static Message receive() {
