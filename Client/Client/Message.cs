@@ -1,8 +1,9 @@
 ﻿using System;
 namespace Client {
     public enum MessageAction {
-        SQL_QUERY,
-        TEST
+        SQL_QUERY_REQUEST,
+        SQL_QUERY_RESPONSE,
+        ERROR
     }
 
     public class Message {

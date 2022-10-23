@@ -16,10 +16,7 @@ namespace Client {
 
                 try {
                     client.Connect(ipEndPoint);
-                    Console.WriteLine("Client conectat la: {0}", client.RemoteEndPoint.ToString());
-
-                    //receive();
-
+                    
                     menu();
 
                     //client.Shutdown(SocketShutdown.Both);
@@ -38,6 +35,8 @@ namespace Client {
 
         public static void menu() {
             Console.Clear();
+            Console.WriteLine("Conectat - ({0})", client.RemoteEndPoint.ToString());
+            Console.WriteLine();
             Console.WriteLine("Alege o optiune:");
             Console.WriteLine("  1. Vizulizeaza tabele");
             Console.WriteLine("  2. Ruleaza SQL");
@@ -52,13 +51,15 @@ namespace Client {
                 case 2:
                     Console.Write("Introdu instructiunea SQL: ");
                     var query = Console.ReadLine();
-                    send(new Message(MessageAction.SQL_QUERY, query));
+                    send(new Message(MessageAction.SQL_QUERY_REQUEST, query));
 
 
                     Message fromServer = receive();
                     if (fromServer != null) {
-                        if (fromServer.action == MessageAction.TEST) {
-                            menu();
+                        if (fromServer.action != MessageAction.ERROR) {
+                            interpretResponse(fromServer);
+                        } else {
+                            error(fromServer.value);
                         }
                     }
 
@@ -69,7 +70,17 @@ namespace Client {
             }
         }
 
-        public static Message parseResponse(string response) {
+        public static void interpretResponse(Message response) {
+            switch (response.action) {
+                case MessageAction.SQL_QUERY_RESPONSE:
+                    Console.WriteLine(response.value);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        public static Message parseReceived(string response) {
             string[] parts = response.Split("|");
             MessageAction messageAction;
             if (Enum.TryParse<MessageAction>(parts[0], out messageAction)) {
@@ -84,13 +95,19 @@ namespace Client {
             int received = client.Receive(bytes);
             string response = Encoding.ASCII.GetString(bytes, 0, received);
 
-            Message message = parseResponse(response);
+            Message message = parseReceived(response);
             return message;
         }
 
         public static void send(Message message) {
             byte[] bytes = Encoding.ASCII.GetBytes(message.ToString());
             int bytesSent = client.Send(bytes);
+        }
+
+        public static void error(string message) {
+            Console.Clear();
+            Console.WriteLine("Eroare: ");
+            Console.WriteLine(message);
         }
     }
 }
