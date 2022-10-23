@@ -19,7 +19,8 @@ namespace Server {
                 Console.WriteLine("Se asteapta o conexiune...");
                 server = listener.Accept();
 
-                receive();
+                Message fromClient = receive();
+                // do something with fromClient
 
                 //server.Shutdown(SocketShutdown.Both);
                 //server.Close();
@@ -28,13 +29,18 @@ namespace Server {
             }
         }
 
-        public static string receive() {
-            byte[] bytes = new byte[1024];
-            int bytesRec = server.Receive(bytes);
-            var data = Encoding.ASCII.GetString(bytes, 0, bytesRec);
+        public static Message parseResponse(string response) {
+            string[] parts = response.Split("|");
+            return new Message((MessageAction)Enum.Parse(typeof(MessageAction), parts[0]), parts[1]);
+        }
 
-            Console.WriteLine("SERVER: {0}", data);
-            return data;
+        public static Message receive() {
+            byte[] bytes = new byte[1024];
+            int received = server.Receive(bytes);
+            string response = Encoding.ASCII.GetString(bytes, 0, received);
+
+            Message message = parseResponse(response);
+            return message;
         }
 
         public static void send(Message message) {

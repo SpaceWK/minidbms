@@ -52,9 +52,13 @@ namespace Client {
                 case 2:
                     Console.Write("Introdu instructiunea SQL: ");
                     var query = Console.ReadLine();
-
                     Message message = new Message(MessageAction.SQL_QUERY, query);
                     send(message);
+
+
+                    Message fromServer = receive();
+                    // do something with fromServer
+
                     break;
                 default:
                     menu();
@@ -62,18 +66,23 @@ namespace Client {
             }
         }
 
-        public static string receive() {
-            byte[] bytes = new byte[1024];
-            int bytesRec = client.Receive(bytes);
-            var data = Encoding.ASCII.GetString(bytes, 0, bytesRec);
+        public static Message parseResponse(string response) {
+            string[] parts = response.Split("|");
+            return new Message((MessageAction)Enum.Parse(typeof(MessageAction), parts[0]), parts[1]);
+        }
 
-            Console.WriteLine("CLIENT: {0}", data);
-            return data;
+        public static Message receive() {
+            byte[] bytes = new byte[1024];
+            int received = client.Receive(bytes);
+            string response = Encoding.ASCII.GetString(bytes, 0, received);
+
+            Message message = parseResponse(response);
+            return message;
         }
 
         public static void send(Message message) {
-            byte[] _message = Encoding.ASCII.GetBytes(message.ToString());
-            int bytesSent = client.Send(_message);
+            byte[] bytes = Encoding.ASCII.GetBytes(message.ToString());
+            int bytesSent = client.Send(bytes);
         }
     }
 }
