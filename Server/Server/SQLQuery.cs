@@ -12,9 +12,11 @@ namespace Server {
     }
 
     public class SQLQuery {
+        // Type
         public SQLQueryType type;
 
 
+        // Query specific
         public string? CREATE_DATABASE_NAME;
 
 
@@ -24,7 +26,7 @@ namespace Server {
 
         public string? CREATE_INDEX_NAME;
         public string? CREATE_INDEX_TABLE_NAME;
-        public string? CREATE_INDEX_STRUCTURE;
+        public List<string>? CREATE_INDEX_TABLE_FIELDS;
 
 
         public string? DROP_DATABASE_NAME;

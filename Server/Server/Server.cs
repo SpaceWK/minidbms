@@ -74,24 +74,6 @@ namespace Server {
         }
 
         public static SQLQuery parseStatement(string statement) {
-            /*
-                CREATE DATABASE db;
-                CREATE TABLE students (
-                    studID INT,
-                    groupID INT,
-                    name VARCHAR,
-                    tel INT,
-                    email VARCHAR,
-                    PRIMARY KEY (studID)
-                );
-                CREATE INDEX idx_studID ON students (studID, email);
-
-                DROP DATABASE db;
-                DROP TABLE students;
-
-                INSERT INTO students () VALUES ();
-            */
-
             statement = statement.Replace(";", String.Empty);
             string pattern = @"\(\s?(.+?\)?)\)";
 
@@ -100,34 +82,41 @@ namespace Server {
 
             string[] args = replacedStatement.Split(" ");
 
+            string replaced;
             SQLQuery sqlQuery;
-            switch (args[0].ToLower()) {
+            switch (args[0].ToLower()) { // TODO: Send fail or success message to client (clientError()).
                 case "create":
                     switch (args[1].ToLower()) {
-                        case "database":
+                        case "database": // CREATE DATABASE db;
                             sqlQuery = new SQLQuery(SQLQueryType.CREATE_DATABASE);
-                            sqlQuery.CREATE_DATABASE_NAME = args[2]; // args[2] - database name
-                            return sqlQuery;
-                        case "table":
-                            string replaced = matches[0].Substring(1, matches[0].Length - 2); // matches[0] - table structure
-                            string[] _args = replaced.Split(",", StringSplitOptions.TrimEntries);
+                            sqlQuery.CREATE_DATABASE_NAME = args[2];
 
-                            Dictionary<string, string> structureItems = new Dictionary<string, string>();
-                            foreach (string arg in _args) {
-                                string[] item = arg.Split(" ");
-                                structureItems.Add(item[0], item[1]);
+                            return sqlQuery;
+                        case "table": // CREATE TABLE students (studID INT, groupID INT, name VARCHAR, tel INT, email VARCHAR, PRIMARY KEY (studID));
+                            replaced = matches[0].Substring(1, matches[0].Length - 2);
+                            string[] attributes = replaced.Split(",", StringSplitOptions.TrimEntries);
+
+                            Dictionary<string, string> tableAttributes = new Dictionary<string, string>();
+                            foreach (string attribute in attributes) {
+                                string[] item = attribute.Split(" ");
+                                tableAttributes.Add(item[0], item[1]);
                             }
 
                             sqlQuery = new SQLQuery(SQLQueryType.CREATE_TABLE);
                             sqlQuery.CREATE_TABLE_NAME = args[2];
-                            // TODO: Set attributes
+                            sqlQuery.CREATE_TABLE_ATTRIBUTES = tableAttributes;
+
                             return sqlQuery;
-                        case "index":
-                            // args[2] - index name
-                            // args[3] - ON
-                            // args[4] - table name
-                            // matches[0] - index structure
-                            break;
+                        case "index": // CREATE INDEX idx_studID ON students (studID, email);
+                            replaced = matches[0].Substring(1, matches[0].Length - 2);
+                            List<string> fields = replaced.Split(",", StringSplitOptions.TrimEntries).ToList();
+
+                            sqlQuery = new SQLQuery(SQLQueryType.CREATE_INDEX);
+                            sqlQuery.CREATE_INDEX_NAME = args[2];
+                            sqlQuery.CREATE_INDEX_TABLE_NAME = args[4];
+                            sqlQuery.CREATE_INDEX_TABLE_FIELDS = fields;
+
+                            return sqlQuery;
                         default:
                             error("Query invalid.");
                             break;
@@ -135,12 +124,16 @@ namespace Server {
                     break;
                 case "drop":
                     switch (args[1].ToLower()) {
-                        case "database":
-                            // args[2] - database name
-                            break;
-                        case "table":
-                            // args[2] - table name
-                            break;
+                        case "database": // DROP DATABASE db;
+                            sqlQuery = new SQLQuery(SQLQueryType.DROP_DATABASE);
+                            sqlQuery.DROP_DATABASE_NAME = args[2];
+
+                            return sqlQuery;
+                        case "table": // DROP TABLE students;
+                            sqlQuery = new SQLQuery(SQLQueryType.DROP_TABLE);
+                            sqlQuery.DROP_TABLE_NAME = args[2];
+
+                            return sqlQuery;
                         default:
                             error("Query invalid.");
                             break;
@@ -150,8 +143,6 @@ namespace Server {
                     error("Query invalid.");
                     break;
             }
-
-            //return new SQLQuery(SQLQueryType.CREATE_DATABASE, args);
 
             return null;
         }
