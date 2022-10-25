@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -40,6 +41,25 @@ namespace Server {
             switch (response.action) {
                 case MessageAction.SQL_QUERY_REQUEST:
                     SQLQuery sqlQuery = parseStatement(response.value);
+                    //if (sqlQuery != null) {
+                    //    executeQuery(sqlQuery);
+                    //} else {
+                    //    error("Nu s-a executat query-ul.");
+                    //}
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        public static void executeQuery(SQLQuery sqlQuery) {
+            switch (sqlQuery.type) {
+                case SQLQueryType.CREATE_DATABASE:
+                    // args[0] = database name;
+                    break;
+                case SQLQueryType.CREATE_TABLE:
+                    // args[0] = table name;
+                    // args[1] = create table structure;
                     break;
                 default:
                     break;
@@ -48,63 +68,73 @@ namespace Server {
 
         public static SQLQuery parseStatement(string statement) {
             /*
-                (?=(?:[^\(]*\([^\(]*\)?)*[^\)]*$)
-             
                 CREATE DATABASE db;
-                CREATE TABLE students %;
-                CREATE INDEX idx_studID ON students (studID);
-                create table stud (id, name);
+                CREATE TABLE students (
+                    studID INT,
+                    groupID INT,
+                    name VARCHAR,
+                    tel INT,
+                    email VARCHAR,
+                    PRIMARY KEY (studID)
+                );
+                CREATE INDEX idx_studID ON students (studID, email);
+
+                DROP DATABASE db;
+                DROP TABLE students;
 
                 INSERT INTO students () VALUES ();
             */
 
-            /*int from;
-            int to;
-            string savedStatement;
-            Queue<string> queue = new Queue<string>();
-            string replacedStatement = statement.Replace(";", String.Empty);
-            while (replacedStatement.Contains("(")) {
-                from = replacedStatement.IndexOf("(");
-                to = replacedStatement.IndexOf(")", from + 1);
-                savedStatement = replacedStatement.Substring(from + 1, to - from - 1); // saved on queue
-                queue.Enqueue(savedStatement);
-                replacedStatement = replacedStatement.Remove(from, to - from + 1).Insert(from, "%");
-            }
+            statement = statement.Replace(";", String.Empty);
+            string pattern = @"\(\s?(.+?\)?)\)";
 
-            Console.WriteLine(replacedStatement);
+            List<string> matches = Regex.Matches(statement, pattern).Cast<Match>().Select(match => match.Value).ToList();
+            string replacedStatement = Regex.Replace(statement, pattern, "%");
 
-            foreach (var item in queue) {
-                Console.WriteLine(item);
-            }*/
+            string[] args = replacedStatement.Split(" ");
 
-            /*switch (args[0].ToLower()) {
+            switch (args[0].ToLower()) {
                 case "create":
                     switch (args[1].ToLower()) {
                         case "database":
                             // args[2] - database name
                             break;
                         case "table":
-                            
-                            Console.WriteLine(">>>" + tempStatement);
                             // args[2] - table name
-                            // split by comma
-                            // split by whitespace
+                            // matches[0] - table structure - split(",")
                             break;
                         case "index":
+                            // args[2] - index name
+                            // args[3] - ON
+                            // args[4] - table name
+                            // matches[0] - index structure
                             break;
                         default:
-                            // wrong command
+                            error("Query invalid.");
                             break;
                     }
                     break;
                 case "drop":
+                    switch (args[1].ToLower()) {
+                        case "database":
+                            // args[2] - database name
+                            break;
+                        case "table":
+                            // args[2] - table name
+                            break;
+                        default:
+                            error("Query invalid.");
+                            break;
+                    }
                     break;
                 default:
-                    // wrong command
+                    error("Query invalid.");
                     break;
-            }*/
+            }
 
-            return new SQLQuery();
+            //return new SQLQuery(SQLQueryType.CREATE_DATABASE, args);
+
+            return null;
         }
 
         public static Message parseReceived(string response) {
