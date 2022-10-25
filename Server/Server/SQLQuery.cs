@@ -8,12 +8,15 @@ namespace Server {
         CREATE_INDEX,
 
         DROP_DATABASE,
-        DROP_TABLE
+        DROP_TABLE,
+
+        ERROR
     }
 
     public class SQLQuery {
-        // Type
+        // Struct
         public SQLQueryType type;
+        public string error = null;
 
 
         // Query specific

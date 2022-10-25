@@ -18,9 +18,6 @@ namespace Client {
                     client.Connect(ipEndPoint);
                     
                     menu();
-
-                    //client.Shutdown(SocketShutdown.Both);
-                    //client.Close();
                 } catch (ArgumentNullException ane) {
                     Console.WriteLine("ArgumentNullException: {0}", ane.ToString());
                 } catch (SocketException se) {
@@ -35,11 +32,12 @@ namespace Client {
 
         public static void menu() {
             Console.Clear();
-            Console.WriteLine("Conectat - ({0})", client.RemoteEndPoint.ToString());
+            Console.WriteLine("Conectat la serverul ({0}).", client.RemoteEndPoint.ToString());
             Console.WriteLine();
             Console.WriteLine("Alege o optiune:");
             Console.WriteLine("  1. Vizulizeaza tabele");
             Console.WriteLine("  2. Ruleaza SQL");
+            Console.WriteLine("  3. Iesi din program");
             Console.WriteLine();
             Console.Write("> ");
             var option = Console.ReadLine();
@@ -63,6 +61,12 @@ namespace Client {
                         }
                     }
 
+                    break;
+                case 3:
+                    client.Shutdown(SocketShutdown.Both);
+                    client.Close();
+
+                    Environment.Exit(0);
                     break;
                 default:
                     menu();
@@ -107,6 +111,27 @@ namespace Client {
         public static void error(string message) {
             Console.Clear();
             Console.WriteLine("Eroare: {0}", message);
+            Console.WriteLine();
+            Console.WriteLine("Alege o optiune:");
+            Console.WriteLine("  1. Meniul principal");
+            Console.WriteLine("  2. Iesi din program");
+            Console.WriteLine();
+            Console.Write("> ");
+            var option = Console.ReadLine();
+
+            Console.Clear();
+            switch (int.Parse(option)) {
+                case 1:
+                    menu();
+                    break;
+                case 2:
+                default:
+                    client.Shutdown(SocketShutdown.Both);
+                    client.Close();
+
+                    Environment.Exit(0);
+                    break;
+            }
         }
     }
 }

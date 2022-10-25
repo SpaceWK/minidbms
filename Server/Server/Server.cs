@@ -24,6 +24,8 @@ namespace Server {
                 Console.WriteLine("Se asteapta o conexiune...");
                 server = listener.Accept();
 
+                clientList();
+
                 Message fromClient = receive();
                 if (fromClient != null) {
                     if (fromClient.action != MessageAction.ERROR) {
@@ -44,10 +46,10 @@ namespace Server {
             switch (response.action) {
                 case MessageAction.SQL_QUERY_REQUEST:
                     SQLQuery sqlQuery = parseStatement(response.value);
-                    if (sqlQuery != null) {
+                    if (sqlQuery != null && sqlQuery.error == null) {
                         executeQuery(sqlQuery);
                     } else {
-                        error("Nu s-a executat query-ul.");
+                        clientError(sqlQuery.error);
                     }
                     break;
                 default:
@@ -88,14 +90,14 @@ namespace Server {
 
             string replaced;
             SQLQuery sqlQuery;
-            switch (args[0].ToLower()) { // TODO: Send fail or success message to client (clientError()).
+            switch (args[0].ToLower()) {
                 case "create":
                     switch (args[1].ToLower()) {
                         case "database": // CREATE DATABASE db;
                             sqlQuery = new SQLQuery(SQLQueryType.CREATE_DATABASE);
                             sqlQuery.CREATE_DATABASE_NAME = args[2];
+                            break;
 
-                            return sqlQuery;
                         case "table": // CREATE TABLE students (studID INT, groupID INT, name VARCHAR, tel INT, email VARCHAR, PRIMARY KEY (studID));
                             replaced = matches[0].Substring(1, matches[0].Length - 2);
                             string[] attributes = replaced.Split(",", StringSplitOptions.TrimEntries);
@@ -109,8 +111,8 @@ namespace Server {
                             sqlQuery = new SQLQuery(SQLQueryType.CREATE_TABLE);
                             sqlQuery.CREATE_TABLE_NAME = args[2];
                             sqlQuery.CREATE_TABLE_ATTRIBUTES = tableAttributes;
+                            break;
 
-                            return sqlQuery;
                         case "index": // CREATE INDEX idx_studID ON students (studID, email);
                             replaced = matches[0].Substring(1, matches[0].Length - 2);
                             List<string> fields = replaced.Split(",", StringSplitOptions.TrimEntries).ToList();
@@ -119,36 +121,42 @@ namespace Server {
                             sqlQuery.CREATE_INDEX_NAME = args[2];
                             sqlQuery.CREATE_INDEX_TABLE_NAME = args[4];
                             sqlQuery.CREATE_INDEX_TABLE_FIELDS = fields;
+                            break;
 
-                            return sqlQuery;
                         default:
-                            error("Query invalid.");
+                            sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                            sqlQuery.error = "SQL query invalid.";
                             break;
                     }
                     break;
+
                 case "drop":
                     switch (args[1].ToLower()) {
                         case "database": // DROP DATABASE db;
                             sqlQuery = new SQLQuery(SQLQueryType.DROP_DATABASE);
                             sqlQuery.DROP_DATABASE_NAME = args[2];
+                            break;
 
-                            return sqlQuery;
                         case "table": // DROP TABLE students;
                             sqlQuery = new SQLQuery(SQLQueryType.DROP_TABLE);
                             sqlQuery.DROP_TABLE_NAME = args[2];
+                            break;
 
-                            return sqlQuery;
                         default:
-                            error("Query invalid.");
+                            sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                            sqlQuery.error = "SQL query invalid.";
                             break;
                     }
                     break;
+
                 default:
-                    error("Query invalid.");
+                    sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                    sqlQuery.error = "SQL query invalid.";
+
                     break;
             }
 
-            return null;
+            return sqlQuery;
         }
 
         public static Message parseReceived(string response) {
@@ -182,6 +190,11 @@ namespace Server {
 
         public static void clientError(string message) {
             send(new Message(MessageAction.ERROR, message));
+        }
+
+        public static void clientList() {
+            Console.Clear();
+            Console.WriteLine("Client ({0}) conectat.", server.RemoteEndPoint.ToString());
         }
     }
 }
