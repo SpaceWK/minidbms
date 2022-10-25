@@ -60,46 +60,33 @@ namespace Server {
             }
         }
 
-        public static void addComandToCatalog() {
-
-            //
-
-        }
-
         public static void executeQuery(SQLQuery sqlQuery) {
             catalog.Load("../../../Catalog.xml");
 
             switch (sqlQuery.type) {
                 case SQLQueryType.CREATE_DATABASE:
                     XmlNode databases = catalog.SelectSingleNode(@"Databases");
-                    if (databases != null) {
-                        //databases.RemoveAll();
+                    if (databases == null) {
+                        return;
+                    }
 
-                        XmlNode database = catalog.SelectSingleNode(@"//Databases/Database");
-                        if (database != null) {
-                            string databaseName = database.Attributes["databaseName"].InnerText;
-                            if (sqlQuery.CREATE_DATABASE_NAME == databaseName) {
-                                clientError("Baza de date '" + sqlQuery.CREATE_DATABASE_NAME + "' exista deja.");
-                            } else {
-                                database = catalog.CreateElement("Database");
-                                XmlAttribute databaseAttribute = catalog.CreateAttribute("databaseName");
-                                databaseAttribute.Value = sqlQuery.CREATE_DATABASE_NAME;
-                                database.Attributes.Append(databaseAttribute);
+                    XmlNode database = catalog.SelectSingleNode(@"//Databases/Database");
+                    if (database == null) {
+                        return;
+                    }
 
-                                databases.AppendChild(database);
+                    string databaseName = database.Attributes["databaseName"].InnerText;
+                    if (sqlQuery.CREATE_DATABASE_NAME == databaseName) {
+                        clientError("Baza de date '" + sqlQuery.CREATE_DATABASE_NAME + "' exista deja.");
+                    } else {
+                        database = catalog.CreateElement("Database");
+                        XmlAttribute databaseAttribute = catalog.CreateAttribute("databaseName");
+                        databaseAttribute.Value = sqlQuery.CREATE_DATABASE_NAME;
+                        database.Attributes.Append(databaseAttribute);
 
-                                catalog.Save("../../../Catalog.xml");
-                            }
-                        } else {
-                            database = catalog.CreateElement("Database");
-                            XmlAttribute databaseAttribute = catalog.CreateAttribute("databaseName");
-                            databaseAttribute.Value = sqlQuery.CREATE_DATABASE_NAME;
-                            database.Attributes.Append(databaseAttribute);
+                        databases.AppendChild(database);
 
-                            databases.AppendChild(database);
-
-                            catalog.Save("../../../Catalog.xml");
-                        }
+                        catalog.Save("../../../Catalog.xml");
                     }
                     break;
 

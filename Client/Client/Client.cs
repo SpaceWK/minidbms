@@ -34,7 +34,7 @@ namespace Client {
             Console.Clear();
             Console.WriteLine("Conectat la serverul ({0}).", client.RemoteEndPoint.ToString());
             Console.WriteLine();
-            Console.WriteLine("Alege o optiune:");
+            Console.WriteLine("Alegeti o optiune:");
             Console.WriteLine("  1. Vizulizeaza tabele");
             Console.WriteLine("  2. Ruleaza SQL");
             Console.WriteLine("  3. Iesi din program");
@@ -47,7 +47,7 @@ namespace Client {
                 case 1:
                     break;
                 case 2:
-                    Console.Write("Introdu instructiunea SQL: ");
+                    Console.Write("Introduceti instructiunea SQL: ");
                     var query = Console.ReadLine();
                     send(new Message(MessageAction.SQL_QUERY_REQUEST, query));
 
@@ -112,9 +112,9 @@ namespace Client {
             Console.Clear();
             Console.WriteLine("Eroare: {0}", message);
             Console.WriteLine();
-            Console.WriteLine("Alege o optiune:");
+            Console.WriteLine("Alegeti o optiune:");
             Console.WriteLine("  1. Meniul principal");
-            Console.WriteLine("  2. Iesi din program");
+            Console.WriteLine("  2. Iesiti din program");
             Console.WriteLine();
             Console.Write("> ");
             var option = Console.ReadLine();
