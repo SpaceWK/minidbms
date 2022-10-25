@@ -106,8 +106,7 @@ namespace Client {
 
         public static void error(string message) {
             Console.Clear();
-            Console.WriteLine("Eroare: ");
-            Console.WriteLine(message);
+            Console.WriteLine("Eroare: {0}", message);
         }
     }
 }

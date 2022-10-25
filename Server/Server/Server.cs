@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
@@ -41,11 +42,11 @@ namespace Server {
             switch (response.action) {
                 case MessageAction.SQL_QUERY_REQUEST:
                     SQLQuery sqlQuery = parseStatement(response.value);
-                    //if (sqlQuery != null) {
-                    //    executeQuery(sqlQuery);
-                    //} else {
-                    //    error("Nu s-a executat query-ul.");
-                    //}
+                    if (sqlQuery != null) {
+                        executeQuery(sqlQuery);
+                    } else {
+                        error("Nu s-a executat query-ul.");
+                    }
                     break;
                 default:
                     break;
@@ -55,11 +56,17 @@ namespace Server {
         public static void executeQuery(SQLQuery sqlQuery) {
             switch (sqlQuery.type) {
                 case SQLQueryType.CREATE_DATABASE:
-                    // args[0] = database name;
+                    // sqlQuery.CREATE_DATABASE_NAME - database name;
+                    if (sqlQuery.CREATE_DATABASE_NAME == "test") {
+                        clientError("Baza de date '" + sqlQuery.CREATE_DATABASE_NAME + "' exista deja.");
+                    }
                     break;
                 case SQLQueryType.CREATE_TABLE:
-                    // args[0] = table name;
-                    // args[1] = create table structure;
+                    // sqlQuery.CREATE_TABLE_NAME - table name;
+                    // etc
+                    break;
+                case SQLQueryType.CREATE_INDEX:
+                    // sqlQuery.CREATE_INDEX_NAME - index name;
                     break;
                 default:
                     break;
@@ -93,16 +100,28 @@ namespace Server {
 
             string[] args = replacedStatement.Split(" ");
 
+            SQLQuery sqlQuery;
             switch (args[0].ToLower()) {
                 case "create":
                     switch (args[1].ToLower()) {
                         case "database":
-                            // args[2] - database name
-                            break;
+                            sqlQuery = new SQLQuery(SQLQueryType.CREATE_DATABASE);
+                            sqlQuery.CREATE_DATABASE_NAME = args[2]; // args[2] - database name
+                            return sqlQuery;
                         case "table":
-                            // args[2] - table name
-                            // matches[0] - table structure - split(",")
-                            break;
+                            string replaced = matches[0].Substring(1, matches[0].Length - 2); // matches[0] - table structure
+                            string[] _args = replaced.Split(",", StringSplitOptions.TrimEntries);
+
+                            Dictionary<string, string> structureItems = new Dictionary<string, string>();
+                            foreach (string arg in _args) {
+                                string[] item = arg.Split(" ");
+                                structureItems.Add(item[0], item[1]);
+                            }
+
+                            sqlQuery = new SQLQuery(SQLQueryType.CREATE_TABLE);
+                            sqlQuery.CREATE_TABLE_NAME = args[2];
+                            // TODO: Set attributes
+                            return sqlQuery;
                         case "index":
                             // args[2] - index name
                             // args[3] - ON
@@ -163,8 +182,11 @@ namespace Server {
 
         public static void error(string message) {
             Console.Clear();
-            Console.WriteLine("Eroare: ");
-            Console.WriteLine(message);
+            Console.WriteLine("Eroare: {0}", message);
+        }
+
+        public static void clientError(string message) {
+            send(new Message(MessageAction.ERROR, message));
         }
     }
 }
