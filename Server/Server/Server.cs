@@ -5,10 +5,12 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml;
 
 namespace Server {
     public class Program {
         public static Socket server;
+        public static XmlDocument catalog = new XmlDocument();
 
         public static void Main(string[] args) {
             IPAddress ipAddress = Dns.GetHostEntry("localhost").AddressList[0];
@@ -54,6 +56,8 @@ namespace Server {
         }
 
         public static void executeQuery(SQLQuery sqlQuery) {
+            catalog.Load("../../../Catalog.xml");
+
             switch (sqlQuery.type) {
                 case SQLQueryType.CREATE_DATABASE:
                     // sqlQuery.CREATE_DATABASE_NAME - database name;
