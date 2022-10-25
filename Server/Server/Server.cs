@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
+using System.Xml.Linq;
+using System.Xml.Serialization;
 
 namespace Server {
     public class Program {
@@ -57,21 +60,58 @@ namespace Server {
             }
         }
 
+        public static void addComandToCatalog() {
+
+            //
+
+        }
+
         public static void executeQuery(SQLQuery sqlQuery) {
             catalog.Load("../../../Catalog.xml");
 
             switch (sqlQuery.type) {
                 case SQLQueryType.CREATE_DATABASE:
+
+                    XmlNode databases = catalog.SelectSingleNode(@"Databases");
+                    //databases.RemoveAll();
+                    XmlNode database = catalog.CreateElement("Database");
+                    XmlAttribute databaseAttribute = catalog.CreateAttribute("databaseName");
+                    databaseAttribute.Value = sqlQuery.CREATE_DATABASE_NAME;
+                    database.Attributes.Append(databaseAttribute);
+                    
+                    databases.AppendChild(database);
+
+                    catalog.Save("../../../Catalog.xml");
+                    
                     // sqlQuery.CREATE_DATABASE_NAME - database name;
                     if (sqlQuery.CREATE_DATABASE_NAME == "test") {
                         clientError("Baza de date '" + sqlQuery.CREATE_DATABASE_NAME + "' exista deja.");
                     }
                     break;
                 case SQLQueryType.CREATE_TABLE:
+
+                    XmlNode databasesTable = catalog.SelectSingleNode(@"Database");
+                    XmlNode adas = catalog.CreateElement("Table");
+
+                    databasesTable.AppendChild(adas);
+
+                    catalog.Save("../../../Catalog.xml");
+
                     // sqlQuery.CREATE_TABLE_NAME - table name;
                     // etc
                     break;
                 case SQLQueryType.CREATE_INDEX:
+
+                    XmlNode databaseIndex = catalog.SelectSingleNode(@"Database databaseName = " + sqlQuery.CREATE_INDEX_TABLE_NAME);
+                    XmlNode index = catalog.CreateElement("Index");
+                    XmlAttribute indexAttribute = catalog.CreateAttribute("IndexName");
+                    indexAttribute.Value = sqlQuery.CREATE_INDEX_NAME;
+                    index.Attributes.Append(indexAttribute);
+
+                    databaseIndex.AppendChild(index);
+
+                    catalog.Save("../../../Catalog.xml");
+
                     // sqlQuery.CREATE_INDEX_NAME - index name;
                     break;
                 default:
