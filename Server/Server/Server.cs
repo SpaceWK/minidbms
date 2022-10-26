@@ -157,6 +157,17 @@ namespace Server {
                             createXmlNodeWithAttributes("Structure", new Dictionary<string, string> { }),
                             @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
                         );
+                        foreach (var item in sqlQuery.CREATE_TABLE_ATTRIBUTES) {
+                            appendXmlNodeTo(
+                                createXmlNodeWithAttributes("Attribute", new Dictionary<string, string> {
+                                    { "name", item.Key },
+                                    { "type", item.Value },
+                                    { "isnull", "false" }
+                                }),
+                                @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/Structure"
+                            );
+                        }
+
                         appendXmlNodeTo(
                             createXmlNodeWithAttributes("PrimaryKey", new Dictionary<string, string> { }),
                             @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
@@ -172,14 +183,12 @@ namespace Server {
 
                         // TODO: Create .kv file for table. create table students (id int, name varchar, tel int);
                         // Key: 1
-                        // Value: 'Cocan#07516233'
+                        // Value: 'Rusu#07516233'
 
                         send(new Message(MessageAction.SUCCESS, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' creata cu succes!"));
                         break;
 
                     case SQLQueryType.CREATE_INDEX:
-                        // @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/IndexFiles"
-
                         if (!xmlNodeExists(@"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']")) {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' nu exista."));
                             return;
