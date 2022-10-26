@@ -135,7 +135,7 @@ namespace Server {
 
                         appendXmlNodeTo(
                             createXmlNodeWithAttributes("Structure", new Dictionary<string, string> { }),
-                            @"//Databases/Database/Tables/Table"
+                            @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
                         );
                         appendXmlNodeTo(
                             createXmlNodeWithAttributes("PrimaryKey", new Dictionary<string, string> { }),
