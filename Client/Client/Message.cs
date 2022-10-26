@@ -3,7 +3,8 @@ namespace Client {
     public enum MessageAction {
         SQL_QUERY_REQUEST,
         SQL_QUERY_RESPONSE,
-        ERROR
+        ERROR,
+        SUCCESS
     }
 
     public class Message {

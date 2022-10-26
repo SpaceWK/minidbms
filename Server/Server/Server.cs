@@ -52,7 +52,7 @@ namespace Server {
                     if (sqlQuery != null && sqlQuery.error == null) {
                         executeQuery(sqlQuery);
                     } else {
-                        clientError(sqlQuery.error);
+                        send(new Message(MessageAction.ERROR, sqlQuery.error));
                     }
                     break;
                 default:
@@ -102,7 +102,7 @@ namespace Server {
                 switch (sqlQuery.type) {
                     case SQLQueryType.CREATE_DATABASE:
                         if (xmlNodeExists(@"//Databases/Database[@databaseName='" + sqlQuery.CREATE_DATABASE_NAME + "']")) {
-                            clientError("Baza de date '" + sqlQuery.CREATE_DATABASE_NAME + "' exista deja.");
+                            send(new Message(MessageAction.ERROR, "Baza de date '" + sqlQuery.CREATE_DATABASE_NAME + "' exista deja."));
                             return;
                         }
 
@@ -117,11 +117,13 @@ namespace Server {
                             createXmlNodeWithAttributes("Tables", new Dictionary<string, string> { }),
                             @"//Databases/Database[@databaseName='" + sqlQuery.CREATE_DATABASE_NAME + "']"
                         );
+
+                        send(new Message(MessageAction.SUCCESS, "Query executat cu succes!"));
                         break;
 
                     case SQLQueryType.CREATE_TABLE:
                         if (xmlNodeExists(@"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']")) {
-                            clientError("Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' exista deja.");
+                            send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' exista deja."));
                             return;
                         }
 
@@ -149,17 +151,21 @@ namespace Server {
                             createXmlNodeWithAttributes("IndexFiles", new Dictionary<string, string> { }),
                             @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
                         );
+
+                        send(new Message(MessageAction.SUCCESS, "Query executat cu succes!"));
                         break;
 
                     case SQLQueryType.CREATE_INDEX:
                         //
+
+                        send(new Message(MessageAction.SUCCESS, "Query executat cu succes!"));
                         break;
 
                     default:
                         break;
                 }
             } else {
-                clientError("Nu exista 'Databases' in 'Catalog.xml'.");
+                send(new Message(MessageAction.ERROR, "Nu exista 'Databases' in 'Catalog.xml'."));
             }
 
             catalog.Save("../../../Catalog.xml");
@@ -272,10 +278,6 @@ namespace Server {
         public static void error(string message) {
             Console.Clear();
             Console.WriteLine("Eroare: {0}", message);
-        }
-
-        public static void clientError(string message) {
-            send(new Message(MessageAction.ERROR, message));
         }
 
         public static void clientList() {

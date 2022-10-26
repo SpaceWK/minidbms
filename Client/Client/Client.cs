@@ -30,8 +30,17 @@ namespace Client {
             }
         }
 
-        public static void menu() {
+        public static void menu(bool displayLastAction = false, Message lastAction = null) {
             Console.Clear();
+            if (displayLastAction) {
+                if (lastAction.action == MessageAction.ERROR) {
+                    Console.WriteLine("Eroare: {0}", lastAction.value);
+                } else if (lastAction.action == MessageAction.SUCCESS) {
+                    Console.WriteLine(lastAction.value);
+                }
+
+                Console.WriteLine();
+            }
             Console.WriteLine("Conectat la serverul ({0}).", client.RemoteEndPoint.ToString());
             Console.WriteLine();
             Console.WriteLine("Alegeti o optiune:");
@@ -54,10 +63,10 @@ namespace Client {
 
                     Message fromServer = receive();
                     if (fromServer != null) {
-                        if (fromServer.action != MessageAction.ERROR) {
+                        if (fromServer.action != MessageAction.ERROR && fromServer.action != MessageAction.SUCCESS) {
                             interpretResponse(fromServer);
                         } else {
-                            error(fromServer.value);
+                            menu(true, fromServer);
                         }
                     }
 
@@ -106,32 +115,6 @@ namespace Client {
         public static void send(Message message) {
             byte[] bytes = Encoding.ASCII.GetBytes(message.ToString());
             int bytesSent = client.Send(bytes);
-        }
-
-        public static void error(string message) {
-            Console.Clear();
-            Console.WriteLine("Eroare: {0}", message);
-            Console.WriteLine();
-            Console.WriteLine("Alegeti o optiune:");
-            Console.WriteLine("  1. Meniul principal");
-            Console.WriteLine("  2. Iesiti din program");
-            Console.WriteLine();
-            Console.Write("> ");
-            var option = Console.ReadLine();
-
-            Console.Clear();
-            switch (int.Parse(option)) {
-                case 1:
-                    menu();
-                    break;
-                case 2:
-                default:
-                    client.Shutdown(SocketShutdown.Both);
-                    client.Close();
-
-                    Environment.Exit(0);
-                    break;
-            }
         }
     }
 }
