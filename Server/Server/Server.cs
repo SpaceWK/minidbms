@@ -60,65 +60,109 @@ namespace Server {
             }
         }
 
+        public static XmlNode createXmlNodeWithAttributes(string nodeName, Dictionary<string, string> nodeAttributes) {
+            XmlNode node = catalog.CreateElement(nodeName);
+            XmlAttribute attribute;
+            foreach (var item in nodeAttributes) {
+                attribute = catalog.CreateAttribute(item.Key);
+                attribute.Value = item.Value;
+                node.Attributes.Append(attribute);
+            }
+
+            return node;
+        }
+
+        public static void appendXmlNodeTo(XmlNode node, string parentNamePath) {
+            catalog.Load("../../../Catalog.xml");
+
+            XmlNode parentNode = catalog.SelectSingleNode(parentNamePath);
+            if (parentNode != null) {
+                parentNode.AppendChild(node);
+            }
+
+            catalog.Save("../../../Catalog.xml");
+        }
+
+        public static bool xmlNodeExists(string nodeNamePath) {
+            catalog.Load("../../../Catalog.xml");
+
+            XmlNode node = catalog.SelectSingleNode(nodeNamePath);
+            return node != null;
+        }
+
+        public static void removeXmlNodeFrom() {
+            //
+        }
+
         public static void executeQuery(SQLQuery sqlQuery) {
             catalog.Load("../../../Catalog.xml");
 
-            switch (sqlQuery.type) {
-                case SQLQueryType.CREATE_DATABASE:
-                    XmlNode databases = catalog.SelectSingleNode(@"Databases");
-                    if (databases == null) {
-                        return;
-                    }
+            XmlNode databasesNode = catalog.SelectSingleNode(@"//Databases");
+            if (databasesNode != null) {
+                switch (sqlQuery.type) {
+                    case SQLQueryType.CREATE_DATABASE:
+                        if (xmlNodeExists(@"//Databases/Database[@databaseName='" + sqlQuery.CREATE_DATABASE_NAME + "']")) {
+                            clientError("Baza de date '" + sqlQuery.CREATE_DATABASE_NAME + "' exista deja.");
+                            return;
+                        }
 
-                    XmlNode database = catalog.SelectSingleNode(@"//Databases/Database");
-                    if (database == null) {
-                        return;
-                    }
+                        appendXmlNodeTo(
+                            createXmlNodeWithAttributes("Database", new Dictionary<string, string> {
+                                { "databaseName", sqlQuery.CREATE_DATABASE_NAME }
+                            }),
+                            @"//Databases"
+                        );
 
-                    string databaseName = database.Attributes["databaseName"].InnerText;
-                    if (sqlQuery.CREATE_DATABASE_NAME == databaseName) {
-                        clientError("Baza de date '" + sqlQuery.CREATE_DATABASE_NAME + "' exista deja.");
-                    } else {
-                        database = catalog.CreateElement("Database");
-                        XmlAttribute databaseAttribute = catalog.CreateAttribute("databaseName");
-                        databaseAttribute.Value = sqlQuery.CREATE_DATABASE_NAME;
-                        database.Attributes.Append(databaseAttribute);
+                        appendXmlNodeTo(
+                            createXmlNodeWithAttributes("Tables", new Dictionary<string, string> { }),
+                            @"//Databases/Database"
+                        );
+                        break;
 
-                        databases.AppendChild(database);
+                    case SQLQueryType.CREATE_TABLE:
+                        if (xmlNodeExists(@"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']")) {
+                            clientError("Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' exista deja.");
+                            return;
+                        }
 
-                        catalog.Save("../../../Catalog.xml");
-                    }
-                    break;
+                        appendXmlNodeTo(
+                            createXmlNodeWithAttributes("Table", new Dictionary<string, string> {
+                                { "tableName", sqlQuery.CREATE_TABLE_NAME },
+                                { "fileName", sqlQuery.CREATE_TABLE_NAME + ".b" }
+                            }),
+                            @"//Databases/Database/Tables"
+                        );
 
-                case SQLQueryType.CREATE_TABLE:
-                    XmlNode databasesTable = catalog.SelectSingleNode(@"//Databases/Database");
-                    XmlNode adas = catalog.CreateElement("Table");
+                        appendXmlNodeTo(
+                            createXmlNodeWithAttributes("Structure", new Dictionary<string, string> { }),
+                            @"//Databases/Database/Tables/Table"
+                        );
+                        appendXmlNodeTo(
+                            createXmlNodeWithAttributes("PrimaryKey", new Dictionary<string, string> { }),
+                            @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
+                        );
+                        appendXmlNodeTo(
+                            createXmlNodeWithAttributes("UniqueKeys", new Dictionary<string, string> { }),
+                            @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
+                        );
+                        appendXmlNodeTo(
+                            createXmlNodeWithAttributes("IndexFiles", new Dictionary<string, string> { }),
+                            @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
+                        );
+                        break;
 
-                    databasesTable.AppendChild(adas);
+                    case SQLQueryType.CREATE_INDEX:
+                        //
+                        break;
 
-                    catalog.Save("../../../Catalog.xml");
-
-                    // sqlQuery.CREATE_TABLE_NAME - table name;
-                    // etc
-                    break;
-
-                case SQLQueryType.CREATE_INDEX:
-                    XmlNode databaseIndex = catalog.SelectSingleNode(@"Database databaseName = " + sqlQuery.CREATE_INDEX_TABLE_NAME);
-                    XmlNode index = catalog.CreateElement("Index");
-                    XmlAttribute indexAttribute = catalog.CreateAttribute("IndexName");
-                    indexAttribute.Value = sqlQuery.CREATE_INDEX_NAME;
-                    index.Attributes.Append(indexAttribute);
-
-                    databaseIndex.AppendChild(index);
-
-                    catalog.Save("../../../Catalog.xml");
-
-                    // sqlQuery.CREATE_INDEX_NAME - index name;
-                    break;
-
-                default:
-                    break;
+                    default:
+                        break;
+                }
+            } else {
+                clientError("Nu exista 'Databases' in 'Catalog.xml'.");
             }
+
+            catalog.Save("../../../Catalog.xml");
         }
 
         public static SQLQuery parseStatement(string statement) {
