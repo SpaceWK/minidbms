@@ -40,6 +40,8 @@ namespace Client {
                 }
 
                 Console.WriteLine();
+                Console.WriteLine("------------------------------");
+                Console.WriteLine();
             }
             Console.WriteLine("Conectat la serverul ({0}).", client.RemoteEndPoint.ToString());
             Console.WriteLine();
@@ -72,6 +74,7 @@ namespace Client {
 
                     break;
                 case 3:
+                    send(new Message(MessageAction.CLOSE_CONNECTION, ""));
                     client.Shutdown(SocketShutdown.Both);
                     client.Close();
 

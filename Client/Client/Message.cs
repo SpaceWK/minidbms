@@ -4,7 +4,8 @@ namespace Client {
         SQL_QUERY_REQUEST,
         SQL_QUERY_RESPONSE,
         ERROR,
-        SUCCESS
+        SUCCESS,
+        CLOSE_CONNECTION
     }
 
     public class Message {

@@ -29,17 +29,16 @@ namespace Server {
 
                 clientList();
 
-                Message fromClient = receive();
-                if (fromClient != null) {
-                    if (fromClient.action != MessageAction.ERROR) {
-                        interpretResponse(fromClient);
-                    } else {
-                        error(fromClient.value);
+                while (true) {
+                    Message fromClient = receive();
+                    if (fromClient != null) {
+                        if (fromClient.action != MessageAction.ERROR) {
+                            interpretResponse(fromClient);
+                        } else {
+                            error(fromClient.value);
+                        }
                     }
                 }
-
-                //server.Shutdown(SocketShutdown.Both);
-                //server.Close();
             } catch (Exception e) {
                 Console.WriteLine(e.ToString());
             }
@@ -50,12 +49,19 @@ namespace Server {
                 case MessageAction.SQL_QUERY_REQUEST:
                     SQLQuery sqlQuery = parseStatement(response.value);
                     if (sqlQuery != null && sqlQuery.error == null) {
+                        Console.WriteLine("Executa query: {0}", response.value);
                         executeQuery(sqlQuery);
                     } else {
                         send(new Message(MessageAction.ERROR, sqlQuery.error));
                     }
                     break;
+
+                case MessageAction.CLOSE_CONNECTION:
                 default:
+                    server.Shutdown(SocketShutdown.Both);
+                    server.Close();
+
+                    Environment.Exit(0);
                     break;
             }
         }
@@ -325,6 +331,7 @@ namespace Server {
         public static void clientList() {
             Console.Clear();
             Console.WriteLine("Client ({0}) conectat.", server.RemoteEndPoint.ToString());
+            Console.WriteLine();
         }
     }
 }
