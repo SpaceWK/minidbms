@@ -90,8 +90,18 @@ namespace Server {
             return node != null;
         }
 
-        public static void removeXmlNodeFrom() {
-            //
+        public static void removeXmlNodeFrom(string nodeNamePath, string parentNamePath) {
+            catalog.Load("../../../Catalog.xml");
+
+            XmlNode parentNode = catalog.SelectSingleNode(parentNamePath);
+            if (parentNode != null) {
+                XmlNode node = catalog.SelectSingleNode(parentNamePath + "/" + nodeNamePath);
+                if (node != null) {
+                    parentNode.RemoveChild(node);
+                }
+            }
+
+            catalog.Save("../../../Catalog.xml");
         }
 
         public static void executeQuery(SQLQuery sqlQuery) {
@@ -118,7 +128,7 @@ namespace Server {
                             @"//Databases/Database[@databaseName='" + sqlQuery.CREATE_DATABASE_NAME + "']"
                         );
 
-                        send(new Message(MessageAction.SUCCESS, "Query executat cu succes!"));
+                        send(new Message(MessageAction.SUCCESS, "Baza de date '" + sqlQuery.CREATE_DATABASE_NAME + "' creata cu succes!"));
                         break;
 
                     case SQLQueryType.CREATE_TABLE:
@@ -152,13 +162,41 @@ namespace Server {
                             @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
                         );
 
-                        send(new Message(MessageAction.SUCCESS, "Query executat cu succes!"));
+                        send(new Message(MessageAction.SUCCESS, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' creata cu succes!"));
                         break;
 
                     case SQLQueryType.CREATE_INDEX:
                         //
 
-                        send(new Message(MessageAction.SUCCESS, "Query executat cu succes!"));
+                        send(new Message(MessageAction.SUCCESS, "Index '" + sqlQuery.CREATE_INDEX_NAME + "' creat cu succes!"));
+                        break;
+
+                    case SQLQueryType.DROP_DATABASE:
+                        if (!xmlNodeExists(@"//Databases/Database[@databaseName='" + sqlQuery.DROP_DATABASE_NAME + "']")) {
+                            send(new Message(MessageAction.ERROR, "Baza de date '" + sqlQuery.DROP_DATABASE_NAME + "' nu exista."));
+                            return;
+                        }
+
+                        removeXmlNodeFrom(
+                            @"Database[@databaseName='" + sqlQuery.DROP_DATABASE_NAME + "']",
+                            @"//Databases"
+                        );
+
+                        send(new Message(MessageAction.SUCCESS, "Baza de date '" + sqlQuery.DROP_DATABASE_NAME + "' stearsa cu succes!"));
+                        break;
+
+                    case SQLQueryType.DROP_TABLE:
+                        if (!xmlNodeExists(@"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.DROP_TABLE_NAME + "']")) {
+                            send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.DROP_TABLE_NAME + "' nu exista."));
+                            return;
+                        }
+
+                        removeXmlNodeFrom(
+                            @"Table[@tableName='" + sqlQuery.DROP_TABLE_NAME + "']",
+                            @"//Databases/Database/Tables"
+                        );
+
+                        send(new Message(MessageAction.SUCCESS, "Tabela '" + sqlQuery.DROP_TABLE_NAME + "' stearsa cu succes!"));
                         break;
 
                     default:
