@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
@@ -66,8 +67,9 @@ namespace Server {
             }
         }
 
-        public static XmlNode createXmlNodeWithAttributes(string nodeName, Dictionary<string, string> nodeAttributes) {
+        public static XmlNode createXmlNodeWithAttributes(string nodeName, Dictionary<string, string> nodeAttributes, string nodeValue = null) {
             XmlNode node = catalog.CreateElement(nodeName);
+            node.InnerText = nodeValue;
             XmlAttribute attribute;
             foreach (var item in nodeAttributes) {
                 attribute = catalog.CreateAttribute(item.Key);
@@ -177,6 +179,33 @@ namespace Server {
 
                     case SQLQueryType.CREATE_INDEX:
                         // @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/IndexFiles"
+
+                        if (!xmlNodeExists(@"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']")) {
+                            send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' nu exista."));
+                            return;
+                        }
+
+                        if (xmlNodeExists(@"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexName='" + sqlQuery.CREATE_INDEX_NAME + "']")) {
+                            send(new Message(MessageAction.ERROR, "Indexul '" + sqlQuery.CREATE_INDEX_NAME + "' exista deja."));
+                            return;
+                        }
+
+                        appendXmlNodeTo(
+                            createXmlNodeWithAttributes("IndexFile", new Dictionary<string, string> {
+                                { "indexFileName", sqlQuery.CREATE_INDEX_NAME + ".b" }
+                            }),
+                            @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles"
+                        );
+
+                        appendXmlNodeTo(
+                            createXmlNodeWithAttributes("IndexAttributes", new Dictionary<string, string> { }),
+                            @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.CREATE_INDEX_NAME + ".b" + "']"
+                        );
+
+                        appendXmlNodeTo(
+                            createXmlNodeWithAttributes("IndexAttribute", new Dictionary<string, string> { }),
+                            @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.CREATE_INDEX_NAME + ".b" + "']/IndexAttributes"
+                        );
 
                         send(new Message(MessageAction.SUCCESS, "Index '" + sqlQuery.CREATE_INDEX_NAME + "' creat cu succes!"));
                         break;
