@@ -162,11 +162,15 @@ namespace Server {
                             @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
                         );
 
+                        // TODO: Create .kv file for table. create table students (id int, name varchar, tel int);
+                        // Key: 1
+                        // Value: 'Cocan#07516233'
+
                         send(new Message(MessageAction.SUCCESS, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' creata cu succes!"));
                         break;
 
                     case SQLQueryType.CREATE_INDEX:
-                        //
+                        // @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/IndexFiles"
 
                         send(new Message(MessageAction.SUCCESS, "Index '" + sqlQuery.CREATE_INDEX_NAME + "' creat cu succes!"));
                         break;
