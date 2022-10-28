@@ -10,7 +10,14 @@ namespace Server {
         DROP_DATABASE,
         DROP_TABLE,
 
+        USE_DATABASE,
+
         ERROR
+    }
+
+    public enum KeyType {
+        PRIMARY_KEY,
+        FOREIGN_KEY
     }
 
     public class SQLQuery {
@@ -25,6 +32,7 @@ namespace Server {
 
         public string? CREATE_TABLE_NAME;
         public Dictionary<string, string>? CREATE_TABLE_ATTRIBUTES;
+        public Dictionary<KeyType, List<string>>? CREATE_TABLE_KEYS;
 
 
         public string? CREATE_INDEX_NAME;
@@ -34,6 +42,9 @@ namespace Server {
 
         public string? DROP_DATABASE_NAME;
         public string? DROP_TABLE_NAME;
+
+
+        public string? USE_DATABASE_NAME;
 
 
         public SQLQuery(SQLQueryType type) {

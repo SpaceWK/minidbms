@@ -12,9 +12,27 @@ using System.Xml.Linq;
 using System.Xml.Serialization;
 
 namespace Server {
+    public class TableAttribute {
+        string name;
+        string type;
+        int length;
+        bool isNull = false;
+        bool isUnique = false;
+
+        public TableAttribute(string name, string type, int length, bool isNull, bool isUnique) {
+            this.name = name;
+            this.type = type;
+            this.length = length;
+            this.isNull = isNull;
+            this.isUnique = isUnique;
+        }
+    }
+
     public class Program {
         public static Socket server;
         public static XmlDocument catalog = new XmlDocument();
+
+        public static string currentDatabase;
 
         public static void Main(string[] args) {
             IPAddress ipAddress = Dns.GetHostEntry("localhost").AddressList[0];
@@ -44,7 +62,6 @@ namespace Server {
                 Console.WriteLine(e.ToString());
             }
         }
-
         public static void interpretResponse(Message response) {
             switch (response.action) {
                 case MessageAction.SQL_QUERY_REQUEST:
@@ -136,11 +153,18 @@ namespace Server {
                             @"//Databases/Database[@databaseName='" + sqlQuery.CREATE_DATABASE_NAME + "']"
                         );
 
+                        currentDatabase = sqlQuery.CREATE_DATABASE_NAME;
+
                         send(new Message(MessageAction.SUCCESS, "Baza de date '" + sqlQuery.CREATE_DATABASE_NAME + "' creata cu succes!"));
                         break;
 
                     case SQLQueryType.CREATE_TABLE:
-                        if (xmlNodeExists(@"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']")) {
+                        if (currentDatabase == null) {
+                            send(new Message(MessageAction.ERROR, "Selectati o baza de date inainte."));
+                            return;
+                        }
+
+                        if (xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']")) {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' exista deja."));
                             return;
                         }
@@ -150,12 +174,12 @@ namespace Server {
                                 { "tableName", sqlQuery.CREATE_TABLE_NAME },
                                 { "fileName", sqlQuery.CREATE_TABLE_NAME + ".b" }
                             }),
-                            @"//Databases/Database/Tables"
+                            @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables"
                         );
 
                         appendXmlNodeTo(
                             createXmlNodeWithAttributes("Structure", new Dictionary<string, string> { }),
-                            @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
+                            @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
                         );
                         foreach (var item in sqlQuery.CREATE_TABLE_ATTRIBUTES) {
                             appendXmlNodeTo(
@@ -164,21 +188,21 @@ namespace Server {
                                     { "type", item.Value },
                                     { "isnull", "false" }
                                 }),
-                                @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/Structure"
+                                @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/Structure"
                             );
                         }
 
                         appendXmlNodeTo(
                             createXmlNodeWithAttributes("PrimaryKey", new Dictionary<string, string> { }),
-                            @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
+                            @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
                         );
                         appendXmlNodeTo(
                             createXmlNodeWithAttributes("UniqueKeys", new Dictionary<string, string> { }),
-                            @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
+                            @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
                         );
                         appendXmlNodeTo(
                             createXmlNodeWithAttributes("IndexFiles", new Dictionary<string, string> { }),
-                            @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
+                            @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
                         );
 
                         // TODO: Create .kv file for table. create table students (id int, name varchar, tel int);
@@ -189,12 +213,12 @@ namespace Server {
                         break;
 
                     case SQLQueryType.CREATE_INDEX:
-                        if (!xmlNodeExists(@"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']")) {
+                        if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']")) {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' nu exista."));
                             return;
                         }
 
-                        if (xmlNodeExists(@"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexName='" + sqlQuery.CREATE_INDEX_NAME + "']")) {
+                        if (xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexName='" + sqlQuery.CREATE_INDEX_NAME + "']")) {
                             send(new Message(MessageAction.ERROR, "Indexul '" + sqlQuery.CREATE_INDEX_NAME + "' exista deja."));
                             return;
                         }
@@ -203,17 +227,17 @@ namespace Server {
                             createXmlNodeWithAttributes("IndexFile", new Dictionary<string, string> {
                                 { "indexFileName", sqlQuery.CREATE_INDEX_NAME + ".b" }
                             }),
-                            @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles"
+                            @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles"
                         );
 
                         appendXmlNodeTo(
                             createXmlNodeWithAttributes("IndexAttributes", new Dictionary<string, string> { }),
-                            @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.CREATE_INDEX_NAME + ".b" + "']"
+                            @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.CREATE_INDEX_NAME + ".b" + "']"
                         );
 
                         appendXmlNodeTo(
                             createXmlNodeWithAttributes("IndexAttribute", new Dictionary<string, string> { }),
-                            @"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.CREATE_INDEX_NAME + ".b" + "']/IndexAttributes"
+                            @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.CREATE_INDEX_NAME + ".b" + "']/IndexAttributes"
                         );
 
                         send(new Message(MessageAction.SUCCESS, "Index '" + sqlQuery.CREATE_INDEX_NAME + "' creat cu succes!"));
@@ -234,17 +258,26 @@ namespace Server {
                         break;
 
                     case SQLQueryType.DROP_TABLE:
-                        if (!xmlNodeExists(@"//Databases/Database/Tables/Table[@tableName='" + sqlQuery.DROP_TABLE_NAME + "']")) {
+                        if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DROP_TABLE_NAME + "']")) {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.DROP_TABLE_NAME + "' nu exista."));
                             return;
                         }
 
                         removeXmlNodeFrom(
                             @"Table[@tableName='" + sqlQuery.DROP_TABLE_NAME + "']",
-                            @"//Databases/Database/Tables"
+                            @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables"
                         );
 
                         send(new Message(MessageAction.SUCCESS, "Tabela '" + sqlQuery.DROP_TABLE_NAME + "' stearsa cu succes!"));
+                        break;
+
+                    case SQLQueryType.USE_DATABASE:
+                        if (!xmlNodeExists(@"//Databases/Database[@databaseName='" + sqlQuery.CREATE_DATABASE_NAME + "']")) {
+                            send(new Message(MessageAction.ERROR, "Baza de date '" + sqlQuery.CREATE_DATABASE_NAME + "' nu exista."));
+                            return;
+                        }
+
+                        currentDatabase = sqlQuery.USE_DATABASE_NAME;
                         break;
 
                     default:
@@ -276,19 +309,27 @@ namespace Server {
                             sqlQuery.CREATE_DATABASE_NAME = args[2];
                             break;
 
-                        case "table": // CREATE TABLE students (studID INT, groupID INT, name VARCHAR, tel INT, email VARCHAR, PRIMARY KEY (studID));
+                        case "table": // CREATE TABLE students (studID INT, groupID INT, name VARCHAR, tel INT, email VARCHAR, PRIMARY KEY (studID), FOREIGN KEY (specID) REFERENCES Specializations(specID));
                             replaced = matches[0].Substring(1, matches[0].Length - 2);
-                            string[] attributes = replaced.Split(",", StringSplitOptions.TrimEntries);
+                            string[] structure = replaced.Split(",", StringSplitOptions.TrimEntries);
 
-                            Dictionary<string, string> tableAttributes = new Dictionary<string, string>();
-                            foreach (string attribute in attributes) {
-                                string[] item = attribute.Split(" ");
-                                tableAttributes.Add(item[0], item[1]);
+                            List<TableAttribute> tableAttributes = new List<TableAttribute>();
+                            Dictionary<KeyType, List<string>> tableKeys = new Dictionary<KeyType, List<string>>();
+                            foreach (string item in structure) {
+                                if (item.Contains("PRIMARY", StringComparison.OrdinalIgnoreCase)) {
+                                    Console.WriteLine(item);
+                                } else if (item.Contains("FOREIGN", StringComparison.OrdinalIgnoreCase)) {
+                                    //
+                                } else {
+                                    string[] tuple = item.Split(" ");
+                                    //tableAttributes.Add(new TableAttribute(tuple[0], tuple[1], 11));
+                                }
                             }
 
                             sqlQuery = new SQLQuery(SQLQueryType.CREATE_TABLE);
                             sqlQuery.CREATE_TABLE_NAME = args[2];
-                            sqlQuery.CREATE_TABLE_ATTRIBUTES = tableAttributes;
+                            //sqlQuery.CREATE_TABLE_ATTRIBUTES = tableAttributes;
+                            sqlQuery.CREATE_TABLE_KEYS = tableKeys;
                             break;
 
                         case "index": // CREATE INDEX idx_studID ON students (studID, email);
@@ -325,6 +366,11 @@ namespace Server {
                             sqlQuery.error = "SQL query invalid.";
                             break;
                     }
+                    break;
+
+                case "use": // USE students;
+                    sqlQuery = new SQLQuery(SQLQueryType.USE_DATABASE);
+                    sqlQuery.USE_DATABASE_NAME = args[1];
                     break;
 
                 default:

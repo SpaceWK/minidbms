@@ -7,6 +7,8 @@ namespace Client {
     public class Program {
         public static Socket client;
 
+        public static string currentDatabase;
+
         public static void Main(string[] args) {
             IPAddress ipAddress = Dns.GetHostEntry("localhost").AddressList[0];
             IPEndPoint ipEndPoint = new IPEndPoint(ipAddress, 11000);
@@ -58,6 +60,10 @@ namespace Client {
                 case 1:
                     break;
                 case 2:
+                    if (currentDatabase != null) {
+                        Console.WriteLine("Baza de date: {0}", currentDatabase);
+                        Console.WriteLine();
+                    }
                     Console.Write("Introduceti instructiunea SQL: ");
                     var query = Console.ReadLine();
                     send(new Message(MessageAction.SQL_QUERY_REQUEST, query));
