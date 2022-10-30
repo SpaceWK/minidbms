@@ -3,6 +3,7 @@ namespace Server {
     public enum MessageAction {
         SQL_QUERY_REQUEST,
         SQL_QUERY_RESPONSE,
+        SELECT_DATABASE,
         ERROR,
         SUCCESS,
         CLOSE_CONNECTION

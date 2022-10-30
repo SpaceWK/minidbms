@@ -48,9 +48,10 @@ namespace Client {
             Console.WriteLine("Conectat la serverul ({0}).", client.RemoteEndPoint.ToString());
             Console.WriteLine();
             Console.WriteLine("Alegeti o optiune:");
-            Console.WriteLine("  1. Vizulizeaza tabele");
-            Console.WriteLine("  2. Ruleaza SQL");
-            Console.WriteLine("  3. Iesi din program");
+            Console.WriteLine("  1. Lista bazele de date");
+            Console.WriteLine("  2. Vizulizeaza tabele");
+            Console.WriteLine("  3. Ruleaza SQL");
+            Console.WriteLine("  4. Iesi din program");
             Console.WriteLine();
             Console.Write("> ");
             var option = Console.ReadLine();
@@ -58,12 +59,18 @@ namespace Client {
             Console.Clear();
             switch (int.Parse(option)) {
                 case 1:
+                    // TODO
                     break;
                 case 2:
+                    // TODO
+                    break;
+                case 3:
                     if (currentDatabase != null) {
                         Console.WriteLine("Baza de date: {0}", currentDatabase);
-                        Console.WriteLine();
+                    } else {
+                        Console.WriteLine("Baza de date: Nu este selectata.");
                     }
+                    Console.WriteLine();
                     Console.Write("Introduceti instructiunea SQL: ");
                     var query = Console.ReadLine();
                     send(new Message(MessageAction.SQL_QUERY_REQUEST, query));
@@ -79,7 +86,7 @@ namespace Client {
                     }
 
                     break;
-                case 3:
+                case 4:
                     send(new Message(MessageAction.CLOSE_CONNECTION, ""));
                     client.Shutdown(SocketShutdown.Both);
                     client.Close();
@@ -96,6 +103,10 @@ namespace Client {
             switch (response.action) {
                 case MessageAction.SQL_QUERY_RESPONSE:
                     Console.WriteLine(response.value);
+                    break;
+                case MessageAction.SELECT_DATABASE:
+                    currentDatabase = response.value;
+                    menu();
                     break;
                 default:
                     break;
