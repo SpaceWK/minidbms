@@ -5,6 +5,7 @@ using System.Data.SqlTypes;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection.Metadata.Ecma335;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
@@ -12,22 +13,6 @@ using System.Xml.Linq;
 using System.Xml.Serialization;
 
 namespace Server {
-    public class TableAttribute {
-        string name;
-        string type;
-        int length;
-        bool isNull = false;
-        bool isUnique = false;
-
-        public TableAttribute(string name, string type, int length, bool isNull = false, bool isUnique = false) {
-            this.name = name;
-            this.type = type;
-            this.length = length;
-            this.isNull = isNull;
-            this.isUnique = isUnique;
-        }
-    }
-
     public class Program {
         public static Socket server;
         public static XmlDocument catalog = new XmlDocument();
@@ -72,6 +57,10 @@ namespace Server {
                     } else {
                         send(new Message(MessageAction.ERROR, sqlQuery.error));
                     }
+                    break;
+
+                case MessageAction.GET_DATABASES_REQUEST:
+                    send(new Message(MessageAction.GET_DATABASES_RESPONSE, "db,test,test1"));
                     break;
 
                 case MessageAction.CLOSE_CONNECTION:
@@ -167,7 +156,8 @@ namespace Server {
                         }
                         if (xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']")) {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' exista deja."));
-                            return;
+                            return; 
+
                         }
 
                         appendXmlNodeTo(
@@ -181,7 +171,7 @@ namespace Server {
                             createXmlNodeWithAttributes("Structure", new Dictionary<string, string> { }),
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
                         );
-                        foreach (var item in sqlQuery.CREATE_TABLE_ATTRIBUTES) {
+                        /*foreach (var item in sqlQuery.CREATE_TABLE_ATTRIBUTES) {
                             appendXmlNodeTo(
                                 createXmlNodeWithAttributes("Attribute", new Dictionary<string, string> {
                                     { "name", item.Key },
@@ -190,7 +180,7 @@ namespace Server {
                                 }),
                                 @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/Structure"
                             );
-                        }
+                        }*/
 
                         appendXmlNodeTo(
                             createXmlNodeWithAttributes("PrimaryKey", new Dictionary<string, string> { }),
@@ -255,6 +245,10 @@ namespace Server {
                         break;
 
                     case SQLQueryType.DROP_TABLE:
+                        if (currentDatabase == null) {
+                            send(new Message(MessageAction.ERROR, "Nicio baza de date selectata."));
+                            return;
+                        }
                         if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DROP_TABLE_NAME + "']")) {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.DROP_TABLE_NAME + "' nu exista."));
                             return;
@@ -288,9 +282,35 @@ namespace Server {
             catalog.Save("../../../Catalog.xml");
         }
 
+        public static Dictionary<TableAttributeType, int> parseAttributeTypeLength(string str) {
+            if (str.Contains("(") && str.Contains(")")) {
+                int start = 0;
+                int end = str.IndexOf("(");
+                string type = str.Substring(start, end).ToLower();
+                TableAttributeType attributeType;
+                if (type == "int") {
+                    attributeType = TableAttributeType.INT;
+                } else {
+                    attributeType = TableAttributeType.VARCHAR;
+                }
+
+                start = str.IndexOf("(") + 1;
+                end = str.IndexOf(")", start);
+                int length = int.Parse(str.Substring(start, end - start));
+
+                return new Dictionary<TableAttributeType, int> { { attributeType, length } };
+            } else {
+                if (str.ToLower() == "int") {
+                    return new Dictionary<TableAttributeType, int> { { TableAttributeType.INT, 11 } };
+                } else {
+                    return new Dictionary<TableAttributeType, int> { { TableAttributeType.VARCHAR, 255 } };
+                }
+            }
+        }
+
         public static SQLQuery parseStatement(string statement) {
             statement = statement.Replace(";", String.Empty);
-            string pattern = @"\(\s?(.+?\)?)\)";
+            string pattern = @"(?<=\().*(?=\))";
 
             List<string> matches = Regex.Matches(statement, pattern).Cast<Match>().Select(match => match.Value).ToList();
             string replacedStatement = Regex.Replace(statement, pattern, "%");
@@ -309,46 +329,72 @@ namespace Server {
 
                         case "table":
                             /*
-                                CREATE TABLE groups (
-                                    GroupID INT PRIMARY KEY,
-                                    SpecID VARCHAR(20) REFERENCES specialization (SpecID)
-                                );
-
-                                CREATE TABLE students (
-                                    StudID INT PRIMARY KEY,
-                                    GroupID INT REFERENCES groups (GroupID),
-                                    StudName VARCHAR(20),
-                                    Email VARCHAR(20)
-                                );
-
-                                CREATE TABLE marks (
-                                    StudID INT(10) REFERENCES students (StudID),
-                                    DiscID VARCHAR(20) REFERENCES disciplines (DiscID),
-                                    Mark INT,
-                                    PRIMARY KEY (StudID,DiscID)
-                                );
+                                CREATE TABLE marks (StudID INT(10) REFERENCES students (StudID), DiscID VARCHAR(20) REFERENCES disciplines (DiscID), Mark INT, PRIMARY KEY (StudID,DiscID));
                             */
-                             
-                            replaced = matches[0].Substring(1, matches[0].Length - 2);
-                            string[] structure = replaced.Split(",", StringSplitOptions.TrimEntries);
+
+                            string[] structure = matches[0].Split(", "); // Watch out for the table attributes to be split by ", ".
 
                             List<TableAttribute> tableAttributes = new List<TableAttribute>();
-                            Dictionary<KeyType, List<string>> tableKeys = new Dictionary<KeyType, List<string>>();
+                            List<KeyValuePair<string, string[]>> compositeKeys = new List<KeyValuePair<string, string[]>>();
                             foreach (string item in structure) {
-                                if (item.Contains("PRIMARY", StringComparison.OrdinalIgnoreCase)) {
-                                    Console.WriteLine(item);
-                                } else if (item.Contains("FOREIGN", StringComparison.OrdinalIgnoreCase)) {
-                                    //
+                                string[] attributeArgs = item.Split(" ");
+
+                                if (item.StartsWith("PRIMARY KEY", StringComparison.OrdinalIgnoreCase)) {
+                                    // Composite primary key
+                                    int start = attributeArgs[2].IndexOf("(") + 1;
+                                    int end = attributeArgs[2].IndexOf(")", start);
+                                    string str = attributeArgs[2].Substring(start, end - start);
+                                    string[] keys = str.Split(",", StringSplitOptions.TrimEntries);
+                                    string compositeKey = str.Replace(",", String.Empty);
+
+                                    compositeKeys.Add(new KeyValuePair<string, string[]> (compositeKey, keys));
                                 } else {
-                                    string[] tuple = item.Split(" ");
-                                    //tableAttributes.Add(new TableAttribute(tuple[0], tuple[1], 11));
+                                    KeyValuePair<TableAttributeType, int> attributeTypeLength = parseAttributeTypeLength(attributeArgs[1]).FirstOrDefault();
+
+                                    if (item.Contains("REFERENCES", StringComparison.OrdinalIgnoreCase)) {
+                                        // Foreign key
+                                        int start = attributeArgs[4].IndexOf("(") + 1;
+                                        int end = attributeArgs[4].IndexOf(")", start);
+                                        string key = attributeArgs[4].Substring(start, end - start);
+                                        
+                                        tableAttributes.Add(new TableAttribute(
+                                            attributeArgs[0],
+                                            attributeTypeLength.Key,
+                                            attributeTypeLength.Value,
+                                            false,
+                                            false,
+                                            false,
+                                            true, 
+                                            attributeArgs[3],
+                                            key
+                                        ));
+                                    } else {
+                                        if (item.Contains("PRIMARY KEY", StringComparison.OrdinalIgnoreCase)) {
+                                            // Primary key
+                                            tableAttributes.Add(new TableAttribute(
+                                                attributeArgs[0],
+                                                attributeTypeLength.Key,
+                                                attributeTypeLength.Value,
+                                                false,
+                                                false,
+                                                true
+                                            ));
+                                        } else {
+                                            // Normal key
+                                            tableAttributes.Add(new TableAttribute(
+                                                attributeArgs[0],
+                                                attributeTypeLength.Key,
+                                                attributeTypeLength.Value
+                                            ));
+                                        }
+                                    }
                                 }
                             }
 
                             sqlQuery = new SQLQuery(SQLQueryType.CREATE_TABLE);
                             sqlQuery.CREATE_TABLE_NAME = args[2];
-                            //sqlQuery.CREATE_TABLE_ATTRIBUTES = tableAttributes;
-                            sqlQuery.CREATE_TABLE_KEYS = tableKeys;
+                            sqlQuery.CREATE_TABLE_ATTRIBUTES = tableAttributes;
+                            sqlQuery.CREATE_TABLE_COMPOSITE_KEYS = compositeKeys;
                             break;
 
                         case "index": // CREATE INDEX idx_studID ON students (studID, email);

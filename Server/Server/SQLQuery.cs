@@ -15,11 +15,6 @@ namespace Server {
         ERROR
     }
 
-    public enum KeyType {
-        PRIMARY_KEY,
-        FOREIGN_KEY
-    }
-
     public class SQLQuery {
         // Struct
         public SQLQueryType type;
@@ -31,8 +26,8 @@ namespace Server {
 
 
         public string? CREATE_TABLE_NAME;
-        public Dictionary<string, string>? CREATE_TABLE_ATTRIBUTES;
-        public Dictionary<KeyType, List<string>>? CREATE_TABLE_KEYS;
+        public List<TableAttribute>? CREATE_TABLE_ATTRIBUTES;
+        public List<KeyValuePair<string, string[]>>? CREATE_TABLE_COMPOSITE_KEYS;
 
 
         public string? CREATE_INDEX_NAME;

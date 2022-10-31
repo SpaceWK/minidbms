@@ -8,6 +8,7 @@ namespace Client {
         public static Socket client;
 
         public static string currentDatabase;
+        public static List<string> databasesList;
 
         public static void Main(string[] args) {
             IPAddress ipAddress = Dns.GetHostEntry("localhost").AddressList[0];
@@ -32,7 +33,7 @@ namespace Client {
             }
         }
 
-        public static void menu(bool displayLastAction = false, Message lastAction = null) {
+        public static void menu(bool displayLastAction = false, Message lastAction = null, int selectedOption = -1) {
             Console.Clear();
             if (displayLastAction) {
                 if (lastAction.action == MessageAction.ERROR) {
@@ -48,18 +49,31 @@ namespace Client {
             Console.WriteLine("Conectat la serverul ({0}).", client.RemoteEndPoint.ToString());
             Console.WriteLine();
             Console.WriteLine("Alegeti o optiune:");
-            Console.WriteLine("  1. Lista bazele de date");
+            Console.WriteLine("  1. Lista baze de date");
             Console.WriteLine("  2. Vizulizeaza tabele");
             Console.WriteLine("  3. Ruleaza SQL");
             Console.WriteLine("  4. Iesi din program");
             Console.WriteLine();
             Console.Write("> ");
-            var option = Console.ReadLine();
+            string option;
+            if (selectedOption != -1) {
+                option = selectedOption.ToString();
+            } else {
+                option = Console.ReadLine();
+            }
 
             Console.Clear();
             switch (int.Parse(option)) {
                 case 1:
-                    // TODO
+                    if (databasesList != null && databasesList.Count() > 0) {
+                        Console.WriteLine("Lista baze de date:");
+                        foreach (string item in databasesList) {
+                            Console.WriteLine("  {0}", item);
+                        }
+                        backMenu();
+                    } else {
+                        send(new Message(MessageAction.GET_DATABASES_REQUEST, null));
+                    }
                     break;
                 case 2:
                     // TODO
@@ -99,14 +113,30 @@ namespace Client {
             }
         }
 
+        public static void backMenu() {
+            Console.WriteLine();
+            Console.WriteLine("Apasa ENTER pentru a reveni la meniul principal.");
+            ConsoleKeyInfo key = Console.ReadKey();
+            if (key.Key == ConsoleKey.Enter) {
+                menu();
+            }
+        }
+
         public static void interpretResponse(Message response) {
             switch (response.action) {
                 case MessageAction.SQL_QUERY_RESPONSE:
                     Console.WriteLine(response.value);
                     break;
+                case MessageAction.GET_DATABASES_RESPONSE:
+                    string[] databases = response.value.Split(",");
+                    foreach (string item in databases) {
+                        databasesList.Add(item);
+                    }
+                    menu(false, null, 1);
+                    break;
                 case MessageAction.SELECT_DATABASE:
                     currentDatabase = response.value;
-                    menu();
+                    menu(false, null, 3);
                     break;
                 default:
                     break;

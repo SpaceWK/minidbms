@@ -4,6 +4,8 @@ namespace Server {
         SQL_QUERY_REQUEST,
         SQL_QUERY_RESPONSE,
         SELECT_DATABASE,
+        GET_DATABASES_REQUEST,
+        GET_DATABASES_RESPONSE,
         ERROR,
         SUCCESS,
         CLOSE_CONNECTION
