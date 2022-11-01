@@ -6,17 +6,17 @@ namespace Server {
         VARCHAR
     }
     public class TableAttribute {
-        string name;
-        TableAttributeType type;
-        int length;
+        public string name;
+        public TableAttributeType type;
+        public int length;
 
-        bool isNull = false;
-        bool isUnique = false;
+        public bool isNull = false;
+        public bool isUnique = false;
 
-        bool isPrimaryKey = false;
-        bool isForeignKey = false;
-        string foreignKeyTableReferenceName = null;
-        string foreignKeyTableReferenceKey = null;
+        public bool isPrimaryKey = false;
+        public bool isForeignKey = false;
+        public string foreignKeyTableReferenceName = null;
+        public string foreignKeyTableReferenceKey = null;
 
         public TableAttribute(
             string name, 

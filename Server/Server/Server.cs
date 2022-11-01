@@ -183,19 +183,12 @@ namespace Server {
                             createXmlNodeWithAttributes("Structure", new Dictionary<string, string> { }),
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
                         );
-                        /*foreach (var item in sqlQuery.CREATE_TABLE_ATTRIBUTES) {
-                            appendXmlNodeTo(
-                                createXmlNodeWithAttributes("Attribute", new Dictionary<string, string> {
-                                    { "name", item.Key },
-                                    { "type", item.Value },
-                                    { "isnull", "false" }
-                                }),
-                                @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/Structure"
-                            );
-                        }*/
-
                         appendXmlNodeTo(
                             createXmlNodeWithAttributes("PrimaryKey", new Dictionary<string, string> { }),
+                            @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
+                        );
+                        appendXmlNodeTo(
+                            createXmlNodeWithAttributes("ForeignKeys", new Dictionary<string, string> { }),
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
                         );
                         appendXmlNodeTo(
@@ -206,6 +199,57 @@ namespace Server {
                             createXmlNodeWithAttributes("IndexFiles", new Dictionary<string, string> { }),
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
                         );
+                        foreach (TableAttribute attribute in sqlQuery.CREATE_TABLE_ATTRIBUTES) {
+                            appendXmlNodeTo(
+                                createXmlNodeWithAttributes("Attribute", new Dictionary<string, string> {
+                                    { "name", attribute.name },
+                                    { "type", attribute.type.ToString().ToLower() },
+                                    { "length", attribute.length.ToString() },
+                                    { "isnull", attribute.isNull.ToString().ToLower() }
+                                }),
+                                @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/Structure"
+                            );
+
+                            if (attribute.isPrimaryKey) {
+                                appendXmlNodeTo(
+                                    createXmlNodeWithAttributes("PrimaryKeyAttribute", new Dictionary<string, string> { }, attribute.name),
+                                    @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/PrimaryKey"
+                                );
+                            }
+                            if (attribute.isForeignKey) {
+                                appendXmlNodeTo(
+                                    createXmlNodeWithAttributes("ForeignKey", new Dictionary<string, string> {
+                                        { "name", attribute.name }
+                                    }),
+                                    @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/ForeignKeys"
+                                );
+                                appendXmlNodeTo(
+                                    createXmlNodeWithAttributes("ForeignKeyAttribute", new Dictionary<string, string> { }, attribute.name),
+                                    @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/ForeignKeys/ForeignKey[@name='" + attribute.name + "']"
+                                );
+                                appendXmlNodeTo(
+                                    createXmlNodeWithAttributes("References", new Dictionary<string, string> {
+                                        { "tableName", attribute.foreignKeyTableReferenceName }
+                                    }),
+                                    @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/ForeignKeys/ForeignKey[@name='" + attribute.name + "']"
+                                );
+                                appendXmlNodeTo(
+                                    createXmlNodeWithAttributes("ReferenceTable", new Dictionary<string, string> { }, attribute.foreignKeyTableReferenceName),
+                                    @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/ForeignKeys/ForeignKey[@name='" + attribute.name + "']/References[@tableName='" + attribute.foreignKeyTableReferenceName + "']"
+                                );
+                                appendXmlNodeTo(
+                                    createXmlNodeWithAttributes("ReferenceAttribute", new Dictionary<string, string> { }, attribute.foreignKeyTableReferenceKey),
+                                    @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/ForeignKeys/ForeignKey[@name='" + attribute.name + "']/References[@tableName='" + attribute.foreignKeyTableReferenceName + "']"
+                                );
+                                // TODO: Can be more foreign attributes and referenced table attributes.
+                            }
+                            if (attribute.isUnique) {
+                                appendXmlNodeTo(
+                                    createXmlNodeWithAttributes("UniqueKeyAttribute", new Dictionary<string, string> { }, attribute.name),
+                                    @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/UniqueKeys"
+                                );
+                            }
+                        }
 
                         // TODO: Create .kv file for table. create table students (id int, name varchar, tel int);
                         // Key: 1
