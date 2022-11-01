@@ -184,7 +184,7 @@ namespace Server {
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
                         );
                         appendXmlNodeTo(
-                            createXmlNodeWithAttributes("PrimaryKey", new Dictionary<string, string> { }),
+                            createXmlNodeWithAttributes("PrimaryKeys", new Dictionary<string, string> { }),
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']"
                         );
                         appendXmlNodeTo(
@@ -213,9 +213,8 @@ namespace Server {
                             if (attribute.isPrimaryKey) {
                                 appendXmlNodeTo(
                                     createXmlNodeWithAttributes("PrimaryKeyAttribute", new Dictionary<string, string> { }, attribute.name),
-                                    @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/PrimaryKey"
+                                    @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/PrimaryKeys"
                                 );
-                                // TODO: Can be more primary keys. composite keys?
                             }
                             if (attribute.isForeignKey) {
                                 appendXmlNodeTo(
@@ -420,8 +419,8 @@ namespace Server {
                                             attributeArgs[0],
                                             attributeTypeLength.Key,
                                             attributeTypeLength.Value,
-                                            false,
-                                            false,
+                                            item.Contains("NOT NULL", StringComparison.OrdinalIgnoreCase) ? false : true,
+                                            item.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) ? true : false,
                                             false,
                                             true, 
                                             attributeArgs[3],
@@ -434,8 +433,8 @@ namespace Server {
                                                 attributeArgs[0],
                                                 attributeTypeLength.Key,
                                                 attributeTypeLength.Value,
-                                                false,
-                                                false,
+                                                item.Contains("NOT NULL", StringComparison.OrdinalIgnoreCase) ? false : true,
+                                                item.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) ? true : false,
                                                 true
                                             ));
                                         } else {
@@ -443,7 +442,9 @@ namespace Server {
                                             tableAttributes.Add(new TableAttribute(
                                                 attributeArgs[0],
                                                 attributeTypeLength.Key,
-                                                attributeTypeLength.Value
+                                                attributeTypeLength.Value,
+                                                item.Contains("NOT NULL", StringComparison.OrdinalIgnoreCase) ? false : true,
+                                                item.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) ? true : false
                                             ));
                                         }
                                     }

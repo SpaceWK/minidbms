@@ -10,7 +10,7 @@ namespace Server {
         public TableAttributeType type;
         public int length;
 
-        public bool isNull = false;
+        public bool isNull = true;
         public bool isUnique = false;
 
         public bool isPrimaryKey = false;
