@@ -27,7 +27,6 @@ namespace Server {
 
         public string? CREATE_TABLE_NAME;
         public List<TableAttribute>? CREATE_TABLE_ATTRIBUTES;
-        public List<KeyValuePair<string, string[]>>? CREATE_TABLE_COMPOSITE_KEYS;
 
 
         public string? CREATE_INDEX_NAME;

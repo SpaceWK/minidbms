@@ -215,6 +215,7 @@ namespace Server {
                                     createXmlNodeWithAttributes("PrimaryKeyAttribute", new Dictionary<string, string> { }, attribute.name),
                                     @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/PrimaryKey"
                                 );
+                                // TODO: Can be more primary keys. composite keys?
                             }
                             if (attribute.isForeignKey) {
                                 appendXmlNodeTo(
@@ -391,7 +392,6 @@ namespace Server {
                             string[] structure = matches[0].Split(", "); // Watch out for the table attributes to be split by ", ".
 
                             List<TableAttribute> tableAttributes = new List<TableAttribute>();
-                            List<KeyValuePair<string, string[]>> compositeKeys = new List<KeyValuePair<string, string[]>>();
                             foreach (string item in structure) {
                                 string[] attributeArgs = item.Split(" ");
 
@@ -401,9 +401,12 @@ namespace Server {
                                     int end = attributeArgs[2].IndexOf(")", start);
                                     string str = attributeArgs[2].Substring(start, end - start);
                                     string[] keys = str.Split(",", StringSplitOptions.TrimEntries);
-                                    string compositeKey = str.Replace(",", String.Empty);
-
-                                    compositeKeys.Add(new KeyValuePair<string, string[]> (compositeKey, keys));
+                                    
+                                    foreach (TableAttribute attribute in tableAttributes) {
+                                        if (keys.Contains(attribute.name)) {
+                                            attribute.isPrimaryKey = true;
+                                        }
+                                    }
                                 } else {
                                     KeyValuePair<TableAttributeType, int> attributeTypeLength = parseAttributeTypeLength(attributeArgs[1]).FirstOrDefault();
 
@@ -450,7 +453,6 @@ namespace Server {
                             sqlQuery = new SQLQuery(SQLQueryType.CREATE_TABLE);
                             sqlQuery.CREATE_TABLE_NAME = args[2];
                             sqlQuery.CREATE_TABLE_ATTRIBUTES = tableAttributes;
-                            sqlQuery.CREATE_TABLE_COMPOSITE_KEYS = compositeKeys;
                             break;
 
                         case "index": // CREATE INDEX idx_studID ON students (studID, email);
