@@ -60,7 +60,19 @@ namespace Server {
                     break;
 
                 case MessageAction.GET_DATABASES_REQUEST:
-                    send(new Message(MessageAction.GET_DATABASES_RESPONSE, "db,test,test1"));
+                    catalog.Load("../../../Catalog.xml");
+
+                    XmlNodeList databasesNodes = catalog.SelectNodes(@"//Databases/Database");
+                    if (databasesNodes != null && databasesNodes.Count > 0) {
+                        List<string> databasesNames = new List<string>();
+                        foreach (XmlNode item in databasesNodes) {
+                            databasesNames.Add(item.Attributes["databaseName"].Value);
+                        }
+
+                        send(new Message(MessageAction.GET_DATABASES_RESPONSE, String.Join(",", databasesNames)));
+                    } else {
+                        send(new Message(MessageAction.GET_DATABASES_RESPONSE, ""));
+                    }
                     break;
 
                 case MessageAction.CLOSE_CONNECTION:

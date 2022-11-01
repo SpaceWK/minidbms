@@ -8,7 +8,7 @@ namespace Client {
         public static Socket client;
 
         public static string currentDatabase;
-        public static List<string> databasesList;
+        public static List<string> databasesList = new List<string>();
 
         public static void Main(string[] args) {
             IPAddress ipAddress = Dns.GetHostEntry("localhost").AddressList[0];
@@ -63,16 +63,19 @@ namespace Client {
             }
 
             Console.Clear();
+
             switch (int.Parse(option)) {
                 case 1:
-                    if (databasesList != null && databasesList.Count() > 0) {
+                    if (databasesList.Count() > 0) {
                         Console.WriteLine("Lista baze de date:");
                         foreach (string item in databasesList) {
-                            Console.WriteLine("  {0}", item);
+                            Console.WriteLine("  - {0}", item);
                         }
                         backMenu();
                     } else {
                         send(new Message(MessageAction.GET_DATABASES_REQUEST, null));
+
+                        receiveFromServer();
                     }
                     break;
                 case 2:
@@ -85,19 +88,11 @@ namespace Client {
                         Console.WriteLine("Baza de date: Nu este selectata.");
                     }
                     Console.WriteLine();
-                    Console.Write("Introduceti instructiunea SQL: ");
+                    Console.Write("Introdcuceti instructiunea SQL: ");
                     var query = Console.ReadLine();
                     send(new Message(MessageAction.SQL_QUERY_REQUEST, query));
 
-
-                    Message fromServer = receive();
-                    if (fromServer != null) {
-                        if (fromServer.action != MessageAction.ERROR && fromServer.action != MessageAction.SUCCESS) {
-                            interpretResponse(fromServer);
-                        } else {
-                            menu(true, fromServer);
-                        }
-                    }
+                    receiveFromServer();
 
                     break;
                 case 4:
@@ -136,7 +131,7 @@ namespace Client {
                     break;
                 case MessageAction.SELECT_DATABASE:
                     currentDatabase = response.value;
-                    menu(false, null, 3);
+                    menu(false, null); // After selection, go directly to option 3: menu(false, null, 3);
                     break;
                 default:
                     break;
@@ -150,6 +145,19 @@ namespace Client {
                 return new Message(messageAction, parts[1]);
             } else {
                 return null;
+            }
+        }
+
+        public static void receiveFromServer() {
+            while (true) {
+                Message fromServer = receive();
+                if (fromServer != null) {
+                    if (fromServer.action != MessageAction.ERROR && fromServer.action != MessageAction.SUCCESS) {
+                        interpretResponse(fromServer);
+                    } else {
+                        menu(true, fromServer);
+                    }
+                }
             }
         }
 
