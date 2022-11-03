@@ -571,8 +571,6 @@ namespace Server {
                                         whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_OR_EQUAL_THAN, conditionArgs[2].Replace("\'", String.Empty)));
                                         break;
                                     default:
-                                        sqlQuery = new SQLQuery(SQLQueryType.ERROR);
-                                        sqlQuery.error = "SQL query invalid.";
                                         break;
                                 }
                             }
