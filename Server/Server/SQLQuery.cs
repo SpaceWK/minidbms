@@ -10,7 +10,11 @@ namespace Server {
         DROP_DATABASE,
         DROP_TABLE,
 
-        USE_DATABASE,
+        USE,
+
+        INSERT,
+
+        DELETE,
 
         ERROR
     }
@@ -39,6 +43,14 @@ namespace Server {
 
 
         public string? USE_DATABASE_NAME;
+
+
+        public string? INSERT_TABLE_NAME;
+        public List<KeyValuePair<string, string>>? INSERT_TABLE_ATTRIBUTES_VALUES;
+
+
+        public string? DETELE_TABLE_NAME;
+        public List<WhereCondition>? DELETE_TABLE_CONDITIONS;
 
 
         public SQLQuery(SQLQueryType type) {

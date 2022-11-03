@@ -318,7 +318,7 @@ namespace Server {
                         send(new Message(MessageAction.SUCCESS, "Tabela '" + sqlQuery.DROP_TABLE_NAME + "' stearsa cu succes!"));
                         break;
 
-                    case SQLQueryType.USE_DATABASE:
+                    case SQLQueryType.USE:
                         if (!xmlNodeExists(@"//Databases/Database[@databaseName='" + sqlQuery.USE_DATABASE_NAME + "']")) {
                             send(new Message(MessageAction.ERROR, "Baza de date '" + sqlQuery.USE_DATABASE_NAME + "' nu exista."));
                             return;
@@ -326,6 +326,30 @@ namespace Server {
 
                         currentDatabase = sqlQuery.USE_DATABASE_NAME;
                         send(new Message(MessageAction.SELECT_DATABASE, sqlQuery.USE_DATABASE_NAME));
+                        break;
+
+                    case SQLQueryType.INSERT:
+                        if (currentDatabase == null) {
+                            send(new Message(MessageAction.ERROR, "Nicio baza de date selectata."));
+                            return;
+                        }
+                        if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']")) {
+                            send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.INSERT_TABLE_NAME + "' nu exista."));
+                            return;
+                        }
+                        // TODO: Write data into .kv file.
+                        break;
+
+                    case SQLQueryType.DELETE:
+                        if (currentDatabase == null) {
+                            send(new Message(MessageAction.ERROR, "Nicio baza de date selectata."));
+                            return;
+                        }
+                        if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DETELE_TABLE_NAME + "']")) {
+                            send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.DETELE_TABLE_NAME + "' nu exista."));
+                            return;
+                        }
+                        // TODO: Remove data from .kv file.
                         break;
 
                     default:
@@ -366,8 +390,8 @@ namespace Server {
 
         public static SQLQuery parseStatement(string statement) {
             statement = statement.Replace(";", String.Empty);
-            string pattern = @"(?<=\().*(?=\))";
 
+            string pattern = @"(?<=\().*(?=\))";
             List<string> matches = Regex.Matches(statement, pattern).Cast<Match>().Select(match => match.Value).ToList();
             string replacedStatement = Regex.Replace(statement, pattern, "%");
 
@@ -493,8 +517,77 @@ namespace Server {
                     break;
 
                 case "use": // USE students;
-                    sqlQuery = new SQLQuery(SQLQueryType.USE_DATABASE);
-                    sqlQuery.USE_DATABASE_NAME = args[2];
+                    sqlQuery = new SQLQuery(SQLQueryType.USE);
+                    sqlQuery.USE_DATABASE_NAME = args[1];
+                    break;
+
+                case "insert": // INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('DB1', 'Databases 1', 7);
+                    if (args[1].Contains("INTO", StringComparison.OrdinalIgnoreCase) && args[4].Contains("VALUES", StringComparison.OrdinalIgnoreCase)) {
+                        pattern = @"(?<=\()(.*?)(?=\))";
+                        matches = Regex.Matches(statement, pattern).Cast<Match>().Select(match => match.Value).ToList();
+
+                        List<KeyValuePair<string, string>> attributesValues = new List<KeyValuePair<string, string>>();
+                        string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries);
+                        string[] values = matches[1].Split(",", StringSplitOptions.TrimEntries);
+                        for (int i = 0; i < attributes.Length; i++) {
+                            attributesValues.Add(new KeyValuePair<string, string>(attributes[i], values[i].Replace("\'", String.Empty)));
+                        }
+
+                        sqlQuery = new SQLQuery(SQLQueryType.INSERT);
+                        sqlQuery.INSERT_TABLE_NAME = args[2];
+                        sqlQuery.INSERT_TABLE_ATTRIBUTES_VALUES = attributesValues;
+                    } else {
+                        sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                        sqlQuery.error = "SQL query invalid.";
+                    }
+                    break;
+
+                case "delete": // DELETE FROM marks WHERE StudID > 50 AND DiscID = 'OOP';
+                    if (args[1].Contains("FROM", StringComparison.OrdinalIgnoreCase) && args[3].Contains("WHERE", StringComparison.OrdinalIgnoreCase)) {
+                        pattern = @"(?<=WHERE ).*";
+                        matches = Regex.Matches(statement, pattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
+                        if (matches.Count > 0) {
+                            List<WhereCondition> whereConditions = new List<WhereCondition>();
+                            string[] conditions = matches[0].Split("AND", StringSplitOptions.TrimEntries);
+                            foreach (string condition in conditions) {
+                                string[] conditionArgs = condition.Split(" "); // Watch out for the conditions to be split by " ".
+                                switch (conditionArgs[1]) {
+                                    case "=":
+                                        whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.EQUAL, conditionArgs[2].Replace("\'", String.Empty)));
+                                        break;
+                                    case "!=":
+                                        whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.NOT_EQUAL, conditionArgs[2].Replace("\'", String.Empty)));
+                                        break;
+                                    case "<":
+                                        whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.LESS_THAN, conditionArgs[2].Replace("\'", String.Empty)));
+                                        break;
+                                    case "<=":
+                                        whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.LESS_OR_EQUAL_THAN, conditionArgs[2].Replace("\'", String.Empty)));
+                                        break;
+                                    case ">":
+                                        whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_THAN, conditionArgs[2].Replace("\'", String.Empty)));
+                                        break;
+                                    case ">=":
+                                        whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_OR_EQUAL_THAN, conditionArgs[2].Replace("\'", String.Empty)));
+                                        break;
+                                    default:
+                                        sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                                        sqlQuery.error = "SQL query invalid.";
+                                        break;
+                                }
+                            }
+
+                            sqlQuery = new SQLQuery(SQLQueryType.DELETE);
+                            sqlQuery.DETELE_TABLE_NAME = args[2];
+                            sqlQuery.DELETE_TABLE_CONDITIONS = whereConditions;
+                        } else {
+                            sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                            sqlQuery.error = "SQL query invalid.";
+                        }
+                    } else {
+                        sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                        sqlQuery.error = "SQL query invalid.";
+                    }
                     break;
 
                 default:
