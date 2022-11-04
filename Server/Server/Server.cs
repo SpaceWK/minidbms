@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection.Metadata.Ecma335;
@@ -19,7 +20,11 @@ namespace Server {
 
         public static string currentDatabase;
 
+        public static string workingPath;
+
         public static void Main(string[] args) {
+            workingPath = Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName;
+
             IPAddress ipAddress = Dns.GetHostEntry("localhost").AddressList[0];
             IPEndPoint ipEndPoint = new IPEndPoint(ipAddress, 11000);
 
@@ -130,6 +135,65 @@ namespace Server {
             catalog.Save("../../../Catalog.xml");
         }
 
+        public static void createDBDirectory(string dbName) {
+            string dbDirectoryPath = Path.Combine(workingPath, "Databases");
+            if (Directory.Exists(dbDirectoryPath)) {
+                Directory.CreateDirectory(Path.Combine(dbDirectoryPath, dbName));
+            }
+        }
+
+        public static void removeDBDirectory(string dbName) {
+            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
+            if (Directory.Exists(dbDirectoryPath)) {
+                Directory.Delete(dbDirectoryPath, true);
+            }
+        }
+
+        public static void createTableKVFile(string dbName, string tableName) {
+            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
+            if (Directory.Exists(dbDirectoryPath)) {
+                string tableFilePath = Path.Combine(dbDirectoryPath, tableName, ".kv");
+                if (!File.Exists(tableFilePath)) {
+                    File.Create(tableFilePath);
+                }
+            }
+        }
+
+        public static void removeTableKVFile(string dbName, string tableName) {
+            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
+            if (Directory.Exists(dbDirectoryPath)) {
+                string tableFilePath = Path.Combine(dbDirectoryPath, tableName, ".kv");
+                if (File.Exists(tableFilePath)) {
+                    File.Delete(tableFilePath);
+                }
+            }
+        }
+
+        public static void writeKVInTableFile(string dbName, string tableName, string key, List<string> values) {
+            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
+            if (Directory.Exists(dbDirectoryPath)) {
+                string tableFilePath = Path.Combine(dbDirectoryPath, tableName, ".kv");
+                if (File.Exists(tableFilePath)) {
+                    string value = string.Join("|", values);
+                    string[] lines = {
+                        key,
+                        value
+                    };
+                    File.WriteAllLines(tableFilePath, lines);
+                }
+            }
+        }
+
+        public static void clearKVFromTableFile(string dbName, string tableName) {
+            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
+            if (Directory.Exists(dbDirectoryPath)) {
+                string tableFilePath = Path.Combine(dbDirectoryPath, tableName, ".kv");
+                if (File.Exists(tableFilePath)) {
+                    File.WriteAllText(tableFilePath, String.Empty);
+                }
+            }
+        }
+
         public static void executeQuery(SQLQuery sqlQuery) {
             catalog.Load("../../../Catalog.xml");
 
@@ -152,6 +216,8 @@ namespace Server {
                             createXmlNodeWithAttributes("Tables", new Dictionary<string, string> { }),
                             @"//Databases/Database[@databaseName='" + sqlQuery.CREATE_DATABASE_NAME + "']"
                         );
+
+                        createDBDirectory(sqlQuery.CREATE_DATABASE_NAME);
 
                         currentDatabase = sqlQuery.CREATE_DATABASE_NAME;
                         send(new Message(MessageAction.SELECT_DATABASE, sqlQuery.CREATE_DATABASE_NAME));
@@ -251,9 +317,7 @@ namespace Server {
                             }
                         }
 
-                        // TODO: Create .kv file for table. create table students (id int, name varchar, tel int);
-                        // Key: 1
-                        // Value: 'Rusu#07516233'
+                        createTableKVFile(currentDatabase, sqlQuery.CREATE_TABLE_NAME);
 
                         send(new Message(MessageAction.SUCCESS, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' creata cu succes!"));
                         break;
@@ -297,6 +361,8 @@ namespace Server {
                             @"//Databases"
                         );
 
+                        removeDBDirectory(sqlQuery.DROP_DATABASE_NAME);
+
                         send(new Message(MessageAction.SUCCESS, "Baza de date '" + sqlQuery.DROP_DATABASE_NAME + "' stearsa cu succes!"));
                         break;
 
@@ -314,6 +380,8 @@ namespace Server {
                             @"Table[@tableName='" + sqlQuery.DROP_TABLE_NAME + "']",
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables"
                         );
+
+                        removeTableKVFile(currentDatabase, sqlQuery.DROP_TABLE_NAME);
 
                         send(new Message(MessageAction.SUCCESS, "Tabela '" + sqlQuery.DROP_TABLE_NAME + "' stearsa cu succes!"));
                         break;
@@ -337,7 +405,11 @@ namespace Server {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.INSERT_TABLE_NAME + "' nu exista."));
                             return;
                         }
-                        // TODO: Write data into .kv file.
+
+                        //writeKVInTableFile(currentDatabase, sqlQuery.INSERT_TABLE_NAME, null, null);
+                        //12345|243#Rusu Mihai#0745123456#mrusu@gmail.com
+
+                        send(new Message(MessageAction.SUCCESS, "Datele inserate cu succes in tabela '" + sqlQuery.DROP_TABLE_NAME + "'!"));
                         break;
 
                     case SQLQueryType.DELETE:
@@ -349,7 +421,9 @@ namespace Server {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.DETELE_TABLE_NAME + "' nu exista."));
                             return;
                         }
-                        // TODO: Remove data from .kv file.
+
+                        removeTableKVFile(currentDatabase, sqlQuery.DETELE_TABLE_NAME);
+                        send(new Message(MessageAction.SUCCESS, "Datele sterse cu succes din tabela '" + sqlQuery.DROP_TABLE_NAME + "'!"));
                         break;
 
                     default:
