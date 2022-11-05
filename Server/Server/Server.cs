@@ -169,22 +169,18 @@ namespace Server {
             }
         }
 
-        public static void writeKVInTableFile(string dbName, string tableName, string key, List<string> values) {
+        public static void appendKVInTableFile(string dbName, string tableName, string key, List<string> values) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
             if (Directory.Exists(dbDirectoryPath)) {
                 string tableFilePath = Path.Combine(dbDirectoryPath, tableName, ".kv");
                 if (File.Exists(tableFilePath)) {
-                    string value = string.Join("|", values);
-                    string[] lines = {
-                        key,
-                        value
-                    };
-                    File.WriteAllLines(tableFilePath, lines);
+                    string value = string.Join("#", values);
+                    File.AppendAllLines(tableFilePath, new string[] { key + "|" + value });
                 }
             }
         }
 
-        public static void clearKVFromTableFile(string dbName, string tableName) {
+        public static void clearKVTableFile(string dbName, string tableName) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
             if (Directory.Exists(dbDirectoryPath)) {
                 string tableFilePath = Path.Combine(dbDirectoryPath, tableName, ".kv");
@@ -192,6 +188,51 @@ namespace Server {
                     File.WriteAllText(tableFilePath, String.Empty);
                 }
             }
+        }
+
+        public static void removeKVFromTableFile(string dbName, string tableName, string key) {
+            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
+            if (Directory.Exists(dbDirectoryPath)) {
+                string tableFilePath = Path.Combine(dbDirectoryPath, tableName, ".kv");
+                if (File.Exists(tableFilePath)) {
+                    List<string> lines = File.ReadAllLines(tableFilePath).ToList();
+                    if (lines.Count > 0) {
+                        int index = 0;
+                        foreach (string line in lines) {
+                            if (line.StartsWith(key)) {
+                                lines.RemoveAt(index);
+                                break;
+                            }
+
+                            index++;
+                        }
+
+                        File.WriteAllLines(tableFilePath, lines);
+                    }
+                }
+            }
+        }
+
+        public static List<string> getValuesByKey(string dbName, string tableName, string key) {
+            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
+            if (Directory.Exists(dbDirectoryPath)) {
+                string tableFilePath = Path.Combine(dbDirectoryPath, tableName, ".kv");
+                if (File.Exists(tableFilePath)) {
+                    List<string> lines = File.ReadAllLines(tableFilePath).ToList();
+                    if (lines.Count > 0) {
+                        foreach (string line in lines) {
+                            if (line.StartsWith(key)) {
+                                string[] keyValue = line.Split("|");
+                                List<string> values = keyValue[1].Split("#").ToList();
+
+                                return values;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return null;
         }
 
         public static void executeQuery(SQLQuery sqlQuery) {
