@@ -2,11 +2,13 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
+using System.Diagnostics.Metrics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection.Metadata.Ecma335;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
@@ -135,6 +137,33 @@ namespace Server {
             catalog.Save("../../../Catalog.xml");
         }
 
+        public static string getXmlNodeValue(string nodeNamePath) {
+            catalog.Load("../../../Catalog.xml");
+
+            XmlNode node = catalog.SelectSingleNode(nodeNamePath);
+            return node.InnerText;
+        }
+
+        public static string getXmlNodeAttributeValue(string nodeNamePath, string attributeName) {
+            catalog.Load("../../../Catalog.xml");
+
+            XmlNode node = catalog.SelectSingleNode(nodeNamePath);
+            return node.Attributes[attributeName].InnerText;
+        }
+
+        public static List<string> getXmlNodeChildrenValues(string nodeNamePath) {
+            List<string> values = new List<string>();
+            XmlNode parent = catalog.SelectSingleNode(nodeNamePath);
+            if (parent != null) {
+                XmlNodeList children = parent.ChildNodes;
+                foreach (XmlNode child in children) {
+                    values.Add(child.InnerText);
+                }
+            }
+
+            return values;
+        }
+
         public static void createDBDirectory(string dbName) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases");
             if (Directory.Exists(dbDirectoryPath)) {
@@ -152,7 +181,7 @@ namespace Server {
         public static void createTableKVFile(string dbName, string tableName) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
             if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, tableName, ".kv");
+                string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
                 if (!File.Exists(tableFilePath)) {
                     File.Create(tableFilePath);
                 }
@@ -162,7 +191,7 @@ namespace Server {
         public static void removeTableKVFile(string dbName, string tableName) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
             if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, tableName, ".kv");
+                string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
                 if (File.Exists(tableFilePath)) {
                     File.Delete(tableFilePath);
                 }
@@ -172,7 +201,7 @@ namespace Server {
         public static void appendKVInTableFile(string dbName, string tableName, string key, List<string> values) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
             if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, tableName, ".kv");
+                string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
                 if (File.Exists(tableFilePath)) {
                     string value = string.Join("#", values);
                     File.AppendAllLines(tableFilePath, new string[] { key + "|" + value });
@@ -183,7 +212,7 @@ namespace Server {
         public static void clearKVTableFile(string dbName, string tableName) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
             if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, tableName, ".kv");
+                string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
                 if (File.Exists(tableFilePath)) {
                     File.WriteAllText(tableFilePath, String.Empty);
                 }
@@ -193,7 +222,7 @@ namespace Server {
         public static void removeKVFromTableFile(string dbName, string tableName, string key) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
             if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, tableName, ".kv");
+                string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
                 if (File.Exists(tableFilePath)) {
                     List<string> lines = File.ReadAllLines(tableFilePath).ToList();
                     if (lines.Count > 0) {
@@ -216,7 +245,7 @@ namespace Server {
         public static List<string> getValuesByKey(string dbName, string tableName, string key) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
             if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, tableName, ".kv");
+                string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
                 if (File.Exists(tableFilePath)) {
                     List<string> lines = File.ReadAllLines(tableFilePath).ToList();
                     if (lines.Count > 0) {
@@ -401,7 +430,6 @@ namespace Server {
                             @"Database[@databaseName='" + sqlQuery.DROP_DATABASE_NAME + "']",
                             @"//Databases"
                         );
-
                         removeDBDirectory(sqlQuery.DROP_DATABASE_NAME);
 
                         send(new Message(MessageAction.SUCCESS, "Baza de date '" + sqlQuery.DROP_DATABASE_NAME + "' stearsa cu succes!"));
@@ -447,24 +475,47 @@ namespace Server {
                             return;
                         }
 
-                        //writeKVInTableFile(currentDatabase, sqlQuery.INSERT_TABLE_NAME, null, null);
+                        string key = null;
+                        List<string> keyConcat = new List<string>();
+                        List<string> values = new List<string>();
+
+                        List<string> primaryKeys = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/PrimaryKeys");
+
+
+                        foreach (KeyValuePair<string, string> attribute in sqlQuery.INSERT_TABLE_ATTRIBUTES_VALUES) {
+                            foreach (string primaryKey in primaryKeys) {
+                                if (attribute.Key == primaryKey) {
+                                    keyConcat.Add(attribute.Value);
+                                    break;
+                                }
+                            }
+                            if(!keyConcat.Contains(attribute.Value)){
+                                values.Add(attribute.Value);
+                            }
+                        }
+                        
+                        key = string.Join(String.Empty, keyConcat);
+
+                        appendKVInTableFile(currentDatabase, sqlQuery.INSERT_TABLE_NAME, key, values);
+
                         //12345|243#Rusu Mihai#0745123456#mrusu@gmail.com
 
-                        send(new Message(MessageAction.SUCCESS, "Datele inserate cu succes in tabela '" + sqlQuery.DROP_TABLE_NAME + "'!"));
+                        send(new Message(MessageAction.SUCCESS, "Datele inserate cu succes in tabela '" + sqlQuery.INSERT_TABLE_NAME + "'!"));
                         break;
-
+                        
                     case SQLQueryType.DELETE:
                         if (currentDatabase == null) {
                             send(new Message(MessageAction.ERROR, "Nicio baza de date selectata."));
                             return;
                         }
-                        if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DETELE_TABLE_NAME + "']")) {
-                            send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.DETELE_TABLE_NAME + "' nu exista."));
+                        if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']")) {
+                            send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.DELETE_TABLE_NAME + "' nu exista."));
                             return;
                         }
 
-                        removeTableKVFile(currentDatabase, sqlQuery.DETELE_TABLE_NAME);
-                        send(new Message(MessageAction.SUCCESS, "Datele sterse cu succes din tabela '" + sqlQuery.DROP_TABLE_NAME + "'!"));
+                        //removeKVFromTableFile(currentDatabase, sqlQuery.DELETE_TABLE_NAME, index);
+
+                        send(new Message(MessageAction.SUCCESS, "Datele sterse cu succes din tabela '" + sqlQuery.DELETE_TABLE_NAME + "'!"));
                         break;
 
                     default:
@@ -636,11 +687,11 @@ namespace Server {
                     sqlQuery.USE_DATABASE_NAME = args[1];
                     break;
 
-                case "insert": // INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('DB1', 'Databases 1', 7);
-                    if (args[1].Contains("INTO", StringComparison.OrdinalIgnoreCase) && args[4].Contains("VALUES", StringComparison.OrdinalIgnoreCase)) {
+                case "insert": // INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('DB1', 'Databases 1', 7); INSERT INTO marks (StudID, DiscID, Mark) VALUES (1, 'sd', 5);
+                    if (args[1].Contains("INTO", StringComparison.OrdinalIgnoreCase)) {
                         pattern = @"(?<=\()(.*?)(?=\))";
                         matches = Regex.Matches(statement, pattern).Cast<Match>().Select(match => match.Value).ToList();
-
+                       
                         List<KeyValuePair<string, string>> attributesValues = new List<KeyValuePair<string, string>>();
                         string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries);
                         string[] values = matches[1].Split(",", StringSplitOptions.TrimEntries);
@@ -691,7 +742,7 @@ namespace Server {
                             }
 
                             sqlQuery = new SQLQuery(SQLQueryType.DELETE);
-                            sqlQuery.DETELE_TABLE_NAME = args[2];
+                            sqlQuery.DELETE_TABLE_NAME = args[2];
                             sqlQuery.DELETE_TABLE_CONDITIONS = whereConditions;
                         } else {
                             sqlQuery = new SQLQuery(SQLQueryType.ERROR);
