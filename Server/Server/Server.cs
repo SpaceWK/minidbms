@@ -27,6 +27,11 @@ namespace Server {
         public static void Main(string[] args) {
             workingPath = Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName;
 
+            string dbDirectoryPath = Path.Combine(workingPath, "Databases");
+            if (!Directory.Exists(dbDirectoryPath)) {
+                Directory.CreateDirectory(Path.Combine(dbDirectoryPath, "Databases"));
+            }
+
             IPAddress ipAddress = Dns.GetHostEntry("localhost").AddressList[0];
             IPEndPoint ipEndPoint = new IPEndPoint(ipAddress, 11000);
 
@@ -430,8 +435,10 @@ namespace Server {
                             @"Database[@databaseName='" + sqlQuery.DROP_DATABASE_NAME + "']",
                             @"//Databases"
                         );
+
                         removeDBDirectory(sqlQuery.DROP_DATABASE_NAME);
 
+                        currentDatabase = null;
                         send(new Message(MessageAction.SUCCESS, "Baza de date '" + sqlQuery.DROP_DATABASE_NAME + "' stearsa cu succes!"));
                         break;
 
