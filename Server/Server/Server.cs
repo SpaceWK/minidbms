@@ -183,22 +183,24 @@ namespace Server {
             }
         }
 
-        public static void createTableKVFile(string dbName, string tableName) {
+        public static FileStream createFile(string dbName, string fileName, string extension) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
             if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
-                if (!File.Exists(tableFilePath)) {
-                    File.Create(tableFilePath);
+                string filePath = Path.Combine(dbDirectoryPath, fileName + extension);
+                if (!File.Exists(filePath)) {
+                    return File.Create(filePath);
                 }
             }
+
+            return null;
         }
 
-        public static void removeTableKVFile(string dbName, string tableName) {
+        public static void removeFile(string dbName, string fileName, string extension) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
             if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
-                if (File.Exists(tableFilePath)) {
-                    File.Delete(tableFilePath);
+                string filePath = Path.Combine(dbDirectoryPath, fileName + extension);
+                if (File.Exists(filePath)) {
+                    File.Delete(filePath);
                 }
             }
         }
@@ -209,6 +211,16 @@ namespace Server {
                 string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
                 if (File.Exists(tableFilePath)) {
                     string value = string.Join("#", values);
+                    File.AppendAllLines(tableFilePath, new string[] { key + "|" + value });
+                }
+            }
+        }
+
+        public static void appendINDInIndexFile(string dbName, string indexName, string key, string value) {
+            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
+            if (Directory.Exists(dbDirectoryPath)) {
+                string tableFilePath = Path.Combine(dbDirectoryPath, indexName + ".ind");
+                if (File.Exists(tableFilePath)) {
                     File.AppendAllLines(tableFilePath, new string[] { key + "|" + value });
                 }
             }
@@ -243,26 +255,6 @@ namespace Server {
 
                         File.WriteAllLines(tableFilePath, lines);
                     }
-                }
-            }
-        }
-
-        public static void createIndexINDFile(string dbName, string indexName) {
-            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
-            if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, indexName + ".ind");
-                if (!File.Exists(tableFilePath)) {
-                    File.Create(tableFilePath);
-                }
-            }
-        }
-
-        public static void appendINDInIndexFile(string dbName, string indexName, string key, string value) {
-            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
-            if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, indexName + ".ind");
-                if (File.Exists(tableFilePath)) {
-                    File.AppendAllLines(tableFilePath, new string[] { key + "|" + value });
                 }
             }
         }
@@ -412,7 +404,10 @@ namespace Server {
                             }
                         }
 
-                        createTableKVFile(currentDatabase, sqlQuery.CREATE_TABLE_NAME);
+                        FileStream createTableKV = createFile(currentDatabase, sqlQuery.CREATE_TABLE_NAME, ".kv");
+                        if (createTableKV != null) {
+                            createTableKV.Dispose();
+                        }
 
                         send(new Message(MessageAction.SUCCESS, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' creata cu succes!"));
                         break;
@@ -447,6 +442,12 @@ namespace Server {
                                 );
                             }
                         } // TODO: Maybe check here for table PKs, don't use as index.
+
+                        
+                        FileStream createIndexIND = createFile(currentDatabase, sqlQuery.CREATE_INDEX_NAME, ".ind"); ;
+                        if (createIndexIND != null) {
+                            createIndexIND.Dispose();
+                        }
 
                         send(new Message(MessageAction.SUCCESS, "Index '" + sqlQuery.CREATE_INDEX_NAME + "' creat cu succes!"));
                         break;
@@ -483,7 +484,7 @@ namespace Server {
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables"
                         );
 
-                        removeTableKVFile(currentDatabase, sqlQuery.DROP_TABLE_NAME);
+                        removeFile(currentDatabase, sqlQuery.DROP_TABLE_NAME, ".kv");
 
                         send(new Message(MessageAction.SUCCESS, "Tabela '" + sqlQuery.DROP_TABLE_NAME + "' stearsa cu succes!"));
                         break;
@@ -510,14 +511,12 @@ namespace Server {
 
                         List<string> keyConcat = new List<string>();
                         List<string> values = new List<string>();
-
                         List<string> insertPKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/PrimaryKeys");
                         // string indexKeys = getXmlNodeValue(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.inse + "']/IndexAttributes");
 
                         foreach (KeyValuePair<string, string> attribute in sqlQuery.INSERT_TABLE_ATTRIBUTES_VALUES) {
                             if (insertPKs.Contains(attribute.Key)) {
                                 keyConcat.Add(attribute.Value);
-                                break;
                             }
                             if (!keyConcat.Contains(attribute.Value)) {
                                 values.Add(attribute.Value);
