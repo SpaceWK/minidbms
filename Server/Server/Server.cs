@@ -247,6 +247,26 @@ namespace Server {
             }
         }
 
+        public static void createIndexINDFile(string dbName, string indexName) {
+            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
+            if (Directory.Exists(dbDirectoryPath)) {
+                string tableFilePath = Path.Combine(dbDirectoryPath, indexName + ".ind");
+                if (!File.Exists(tableFilePath)) {
+                    File.Create(tableFilePath);
+                }
+            }
+        }
+
+        public static void appendINDInIndexFile(string dbName, string indexName, string key, string value) {
+            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
+            if (Directory.Exists(dbDirectoryPath)) {
+                string tableFilePath = Path.Combine(dbDirectoryPath, indexName + ".ind");
+                if (File.Exists(tableFilePath)) {
+                    File.AppendAllLines(tableFilePath, new string[] { key + "|" + value });
+                }
+            }
+        }
+
         public static List<string> getValuesByKey(string dbName, string tableName, string key) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
             if (Directory.Exists(dbDirectoryPath)) {
@@ -417,10 +437,16 @@ namespace Server {
                             createXmlNodeWithAttributes("IndexAttributes", new Dictionary<string, string> { }),
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.CREATE_INDEX_NAME + ".b" + "']"
                         );
-                        appendXmlNodeTo(
-                            createXmlNodeWithAttributes("IndexAttribute", new Dictionary<string, string> { }),
-                            @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.CREATE_INDEX_NAME + ".b" + "']/IndexAttributes"
-                        );
+
+                        List<string> createIndexPKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/PrimaryKeys");
+                        foreach (string indexAttribute in sqlQuery.CREATE_INDEX_TABLE_FIELDS) {
+                            if (!createIndexPKs.Contains(indexAttribute)) {
+                                appendXmlNodeTo(
+                                    createXmlNodeWithAttributes("IndexAttribute", new Dictionary<string, string> { }, indexAttribute),
+                                    @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.CREATE_INDEX_NAME + ".b" + "']/IndexAttributes"
+                                );
+                            }
+                        } // TODO: Maybe check here for table PKs, don't use as index.
 
                         send(new Message(MessageAction.SUCCESS, "Index '" + sqlQuery.CREATE_INDEX_NAME + "' creat cu succes!"));
                         break;
@@ -482,30 +508,23 @@ namespace Server {
                             return;
                         }
 
-                        string key = null;
                         List<string> keyConcat = new List<string>();
                         List<string> values = new List<string>();
 
-                        List<string> primaryKeys = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/PrimaryKeys");
-
+                        List<string> insertPKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/PrimaryKeys");
+                        // string indexKeys = getXmlNodeValue(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.inse + "']/IndexAttributes");
 
                         foreach (KeyValuePair<string, string> attribute in sqlQuery.INSERT_TABLE_ATTRIBUTES_VALUES) {
-                            foreach (string primaryKey in primaryKeys) {
-                                if (attribute.Key == primaryKey) {
-                                    keyConcat.Add(attribute.Value);
-                                    break;
-                                }
+                            if (insertPKs.Contains(attribute.Key)) {
+                                keyConcat.Add(attribute.Value);
+                                break;
                             }
-                            if(!keyConcat.Contains(attribute.Value)){
+                            if (!keyConcat.Contains(attribute.Value)) {
                                 values.Add(attribute.Value);
                             }
                         }
                         
-                        key = string.Join(String.Empty, keyConcat);
-
-                        appendKVInTableFile(currentDatabase, sqlQuery.INSERT_TABLE_NAME, key, values);
-
-                        //12345|243#Rusu Mihai#0745123456#mrusu@gmail.com
+                        appendKVInTableFile(currentDatabase, sqlQuery.INSERT_TABLE_NAME, string.Join(String.Empty, keyConcat), values);
 
                         send(new Message(MessageAction.SUCCESS, "Datele inserate cu succes in tabela '" + sqlQuery.INSERT_TABLE_NAME + "'!"));
                         break;
@@ -653,9 +672,13 @@ namespace Server {
                             sqlQuery.CREATE_TABLE_ATTRIBUTES = tableAttributes;
                             break;
 
-                        case "index": // CREATE INDEX idx_studID ON students (studID, email);
-                            replaced = matches[0].Substring(1, matches[0].Length - 2);
-                            List<string> fields = replaced.Split(",", StringSplitOptions.TrimEntries).ToList();
+                        case "index":
+                            /*
+                                CREATE INDEX idx_StudID ON marks (StudID);
+                                CREATE INDEX idx_StudID ON marks (StudID, Mark);
+                            */
+
+                            List<string> fields = matches[0].Split(",", StringSplitOptions.TrimEntries).ToList();
 
                             sqlQuery = new SQLQuery(SQLQueryType.CREATE_INDEX);
                             sqlQuery.CREATE_INDEX_NAME = args[2];
@@ -677,7 +700,7 @@ namespace Server {
                             sqlQuery.DROP_DATABASE_NAME = args[2];
                             break;
 
-                        case "table": // DROP TABLE students;
+                        case "table": // DROP TABLE marks;
                             sqlQuery = new SQLQuery(SQLQueryType.DROP_TABLE);
                             sqlQuery.DROP_TABLE_NAME = args[2];
                             break;
@@ -689,12 +712,12 @@ namespace Server {
                     }
                     break;
 
-                case "use": // USE students;
+                case "use": // USE db;
                     sqlQuery = new SQLQuery(SQLQueryType.USE);
                     sqlQuery.USE_DATABASE_NAME = args[1];
                     break;
 
-                case "insert": // INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('DB1', 'Databases 1', 7); INSERT INTO marks (StudID, DiscID, Mark) VALUES (1, 'sd', 5);
+                case "insert": // INSERT INTO marks (StudID, DiscID, Mark) VALUES (1, 'OOP', 5);
                     if (args[1].Contains("INTO", StringComparison.OrdinalIgnoreCase)) {
                         pattern = @"(?<=\()(.*?)(?=\))";
                         matches = Regex.Matches(statement, pattern).Cast<Match>().Select(match => match.Value).ToList();
@@ -715,7 +738,7 @@ namespace Server {
                     }
                     break;
 
-                case "delete": // DELETE FROM marks WHERE StudID > 50 AND DiscID = 'OOP';
+                case "delete": // DELETE FROM marks WHERE StudID = 1 AND DiscID = 'OOP';
                     if (args[1].Contains("FROM", StringComparison.OrdinalIgnoreCase) && args[3].Contains("WHERE", StringComparison.OrdinalIgnoreCase)) {
                         pattern = @"(?<=WHERE ).*";
                         matches = Regex.Matches(statement, pattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
