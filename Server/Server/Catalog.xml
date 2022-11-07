@@ -1,3 +1,51 @@
 ﻿<?xml version="1.0" encoding="UTF-8"?>
 <Databases>
+  <Database databaseName="students">
+    <Tables>
+      <Table tableName="marks" fileName="marks.b">
+        <Structure>
+          <Attribute name="StudID" type="int" length="10" isnull="true">
+          </Attribute>
+          <Attribute name="DiscID" type="varchar" length="20" isnull="true">
+          </Attribute>
+          <Attribute name="Mark" type="int" length="11" isnull="true">
+          </Attribute>
+        </Structure>
+        <PrimaryKeys>
+          <PrimaryKeyAttribute>StudID</PrimaryKeyAttribute>
+          <PrimaryKeyAttribute>DiscID</PrimaryKeyAttribute>
+        </PrimaryKeys>
+        <ForeignKeys>
+          <ForeignKey name="StudID">
+            <ForeignKeyAttribute>StudID</ForeignKeyAttribute>
+            <References tableName="students">
+              <ReferenceTable>students</ReferenceTable>
+              <ReferenceAttribute>StudID</ReferenceAttribute>
+            </References>
+          </ForeignKey>
+          <ForeignKey name="DiscID">
+            <ForeignKeyAttribute>DiscID</ForeignKeyAttribute>
+            <References tableName="disciplines">
+              <ReferenceTable>disciplines</ReferenceTable>
+              <ReferenceAttribute>DiscID</ReferenceAttribute>
+            </References>
+          </ForeignKey>
+        </ForeignKeys>
+        <UniqueKeys>
+        </UniqueKeys>
+        <IndexFiles>
+          <IndexFile indexFileName="idx_markID.b">
+            <IndexAttributes>
+              <IndexAttribute>Mar</IndexAttribute>
+            </IndexAttributes>
+          </IndexFile>
+          <IndexFile indexFileName="idx_studID.b">
+            <IndexAttributes>
+              <IndexAttribute>Mark</IndexAttribute>
+            </IndexAttributes>
+          </IndexFile>
+        </IndexFiles>
+      </Table>
+    </Tables>
+  </Database>
 </Databases>

@@ -247,6 +247,26 @@ namespace Server {
             }
         }
 
+        public static void createIndexINDFile(string dbName, string indexName) {
+            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
+            if (Directory.Exists(dbDirectoryPath)) {
+                string tableFilePath = Path.Combine(dbDirectoryPath, indexName + ".ind");
+                if (!File.Exists(tableFilePath)) {
+                    File.Create(tableFilePath);
+                }
+            }
+        }
+
+        public static void appendINDInIndexFile(string dbName, string indexName, string key, string value) {
+            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
+            if (Directory.Exists(dbDirectoryPath)) {
+                string tableFilePath = Path.Combine(dbDirectoryPath, indexName + ".ind");
+                if (File.Exists(tableFilePath)) {
+                    File.AppendAllLines(tableFilePath, new string[] { key + "|" + value });
+                }
+            }
+        }
+
         public static List<string> getValuesByKey(string dbName, string tableName, string key) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
             if (Directory.Exists(dbDirectoryPath)) {
@@ -418,9 +438,13 @@ namespace Server {
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.CREATE_INDEX_NAME + ".b" + "']"
                         );
                         appendXmlNodeTo(
-                            createXmlNodeWithAttributes("IndexAttribute", new Dictionary<string, string> { }),
+                            createXmlNodeWithAttributes("IndexAttribute", new Dictionary<string, string> { }, sqlQuery.CREATE_INDEX_TABLE_FIELDS[1]),
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.CREATE_INDEX_NAME + ".b" + "']/IndexAttributes"
                         );
+
+                        //TO DO: Afisat atributele pentru IndexFile
+
+                        createIndexINDFile(currentDatabase, sqlQuery.CREATE_INDEX_TABLE_FIELDS[1]);
 
                         send(new Message(MessageAction.SUCCESS, "Index '" + sqlQuery.CREATE_INDEX_NAME + "' creat cu succes!"));
                         break;
@@ -482,12 +506,13 @@ namespace Server {
                             return;
                         }
 
-                        string key = null;
+                        string tableKey = null;
+                        string indexKey = null ;
                         List<string> keyConcat = new List<string>();
-                        List<string> values = new List<string>();
+                        List<string> tableValues = new List<string>();
 
                         List<string> primaryKeys = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/PrimaryKeys");
-
+                        string indexKeys = getXmlNodeValue(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.inse + "']/IndexAttributes");
 
                         foreach (KeyValuePair<string, string> attribute in sqlQuery.INSERT_TABLE_ATTRIBUTES_VALUES) {
                             foreach (string primaryKey in primaryKeys) {
@@ -497,13 +522,19 @@ namespace Server {
                                 }
                             }
                             if(!keyConcat.Contains(attribute.Value)){
-                                values.Add(attribute.Value);
+                                tableValues.Add(attribute.Value);
+                            }
+
+                            if(attribute.Key == indexKeys) {
+                                indexKey = attribute.Value;
                             }
                         }
-                        
-                        key = string.Join(String.Empty, keyConcat);
 
-                        appendKVInTableFile(currentDatabase, sqlQuery.INSERT_TABLE_NAME, key, values);
+                        tableKey = string.Join(String.Empty, keyConcat);
+
+                        appendKVInTableFile(currentDatabase, sqlQuery.INSERT_TABLE_NAME, tableKey, tableValues);
+
+                        appendINDInIndexFile(currentDatabase, sqlQuery.CREATE_INDEX_TABLE_FIELDS[1], indexKey, tableKey);
 
                         //12345|243#Rusu Mihai#0745123456#mrusu@gmail.com
 
@@ -654,7 +685,7 @@ namespace Server {
                             break;
 
                         case "index": // CREATE INDEX idx_studID ON students (studID, email);
-                            replaced = matches[0].Substring(1, matches[0].Length - 2);
+                            replaced = matches[0].Substring(0, matches[0].Length);
                             List<string> fields = replaced.Split(",", StringSplitOptions.TrimEntries).ToList();
 
                             sqlQuery = new SQLQuery(SQLQueryType.CREATE_INDEX);
