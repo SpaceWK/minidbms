@@ -2,8 +2,27 @@
 USE students;
 
 
+# Disciplines
 CREATE TABLE disciplines (DiscID VARCHAR(5) PRIMARY KEY, DName VARCHAR(20), CredirNr INT);
 
+INSERT INTO disciplines (DiscID, DName, CredirNr) VALUES ('DB1', 'Databases 1', 7);
+INSERT INTO disciplines (DiscID, DName, CredirNr) VALUES ('DB', 'Data Structures', 6);
+INSERT INTO disciplines (DiscID, DName, CredirNr) VALUES ('CP', 'C Programming', 8);
+
+
+# Specialization
+CREATE TABLE specialization (SpecID VARCHAR(5) PRIMARY KEY, SpecName VARCHAR(40), Language VARCHAR(20));
+
+INSERT INTO specialization (SpecID, SpecName, Language) VALUES ('I', 'Informatics', 'English');
+
+
+# Groups
+CREATE TABLE groups (GroupID INT PRIMARY KEY, SpecID VARCHAR(20) REFERENCES specialization (SpecID));
+
+INSERT INTO groups (GroupID, SpecID) VALUES (531, 'I');
+
+
+#
 CREATE TABLE marks (StudID INT(10) REFERENCES students (StudID), DiscID VARCHAR(20) REFERENCES disciplines (DiscID), Mark INT, PRIMARY KEY (StudID,DiscID));
 
 

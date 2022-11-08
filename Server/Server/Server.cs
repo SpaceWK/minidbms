@@ -323,13 +323,16 @@ namespace Server {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' exista deja."));
                             return;
                         }
+
                         foreach (TableAttribute attribute in sqlQuery.CREATE_TABLE_ATTRIBUTES) {
                             if (attribute.isForeignKey) {
                                 if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + attribute.foreignKeyTableReferenceName + "']")) {
                                     send(new Message(MessageAction.ERROR, "Tabela de referinta '" + attribute.foreignKeyTableReferenceName + "' nu exista."));
                                     return;
                                 }
-                                if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + attribute.foreignKeyTableReferenceName + "']/Structure/Attribute[@name='" + attribute.foreignKeyTableReferenceKey + "']")) {
+
+                                List<string> referenceTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + attribute.foreignKeyTableReferenceName + "']/PrimaryKeys");
+                                if (!referenceTablePKs.Contains(attribute.foreignKeyTableReferenceKey)) {
                                     send(new Message(MessageAction.ERROR, "Cheia '" + attribute.foreignKeyTableReferenceKey + "' din tabela de referinta '" + attribute.foreignKeyTableReferenceName + "' nu exista."));
                                     return;
                                 }
