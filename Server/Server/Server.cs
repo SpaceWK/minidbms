@@ -321,8 +321,19 @@ namespace Server {
                         }
                         if (xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']")) {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' exista deja."));
-                            return; 
-
+                            return;
+                        }
+                        foreach (TableAttribute attribute in sqlQuery.CREATE_TABLE_ATTRIBUTES) {
+                            if (attribute.isForeignKey) {
+                                if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + attribute.foreignKeyTableReferenceName + "']")) {
+                                    send(new Message(MessageAction.ERROR, "Tabela de referinta '" + attribute.foreignKeyTableReferenceName + "' nu exista."));
+                                    return;
+                                }
+                                if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + attribute.foreignKeyTableReferenceName + "']/Structure/Attribute[@name='" + attribute.foreignKeyTableReferenceKey + "']")) {
+                                    send(new Message(MessageAction.ERROR, "Cheia '" + attribute.foreignKeyTableReferenceKey + "' din tabela de referinta '" + attribute.foreignKeyTableReferenceName + "' nu exista."));
+                                    return;
+                                }
+                            }
                         }
 
                         appendXmlNodeTo(
@@ -593,16 +604,12 @@ namespace Server {
             switch (args[0].ToLower()) {
                 case "create":
                     switch (args[1].ToLower()) {
-                        case "database": // CREATE DATABASE db;
+                        case "database":
                             sqlQuery = new SQLQuery(SQLQueryType.CREATE_DATABASE);
                             sqlQuery.CREATE_DATABASE_NAME = args[2];
                             break;
 
                         case "table":
-                            /*
-                                CREATE TABLE marks (StudID INT(10) REFERENCES students (StudID), DiscID VARCHAR(20) REFERENCES disciplines (DiscID), Mark INT, PRIMARY KEY (StudID,DiscID));
-                            */
-
                             string[] structure = matches[0].Split(", "); // Watch out for the table attributes to be split by ", ".
 
                             List<TableAttribute> tableAttributes = new List<TableAttribute>();
@@ -672,11 +679,6 @@ namespace Server {
                             break;
 
                         case "index":
-                            /*
-                                CREATE INDEX idx_StudID ON marks (StudID);
-                                CREATE INDEX idx_StudID ON marks (StudID, Mark);
-                            */
-
                             List<string> fields = matches[0].Split(",", StringSplitOptions.TrimEntries).ToList();
 
                             sqlQuery = new SQLQuery(SQLQueryType.CREATE_INDEX);
@@ -694,12 +696,12 @@ namespace Server {
 
                 case "drop":
                     switch (args[1].ToLower()) {
-                        case "database": // DROP DATABASE db;
+                        case "database":
                             sqlQuery = new SQLQuery(SQLQueryType.DROP_DATABASE);
                             sqlQuery.DROP_DATABASE_NAME = args[2];
                             break;
 
-                        case "table": // DROP TABLE marks;
+                        case "table":
                             sqlQuery = new SQLQuery(SQLQueryType.DROP_TABLE);
                             sqlQuery.DROP_TABLE_NAME = args[2];
                             break;
@@ -711,12 +713,12 @@ namespace Server {
                     }
                     break;
 
-                case "use": // USE db;
+                case "use":
                     sqlQuery = new SQLQuery(SQLQueryType.USE);
                     sqlQuery.USE_DATABASE_NAME = args[1];
                     break;
 
-                case "insert": // INSERT INTO marks (StudID, DiscID, Mark) VALUES (1, 'OOP', 5);
+                case "insert":
                     if (args[1].Contains("INTO", StringComparison.OrdinalIgnoreCase)) {
                         pattern = @"(?<=\()(.*?)(?=\))";
                         matches = Regex.Matches(statement, pattern).Cast<Match>().Select(match => match.Value).ToList();
@@ -737,7 +739,7 @@ namespace Server {
                     }
                     break;
 
-                case "delete": // DELETE FROM marks WHERE StudID = 1 AND DiscID = 'OOP';
+                case "delete":
                     if (args[1].Contains("FROM", StringComparison.OrdinalIgnoreCase) && args[3].Contains("WHERE", StringComparison.OrdinalIgnoreCase)) {
                         pattern = @"(?<=WHERE ).*";
                         matches = Regex.Matches(statement, pattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
