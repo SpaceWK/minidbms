@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Diagnostics.Metrics;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection.Metadata.Ecma335;
@@ -236,27 +237,35 @@ namespace Server {
             }
         }
 
-        public static void removeKVFromTableFile(string dbName, string tableName, string key) {
+        public static int removeKVFromTableFile(string dbName, string tableName, string key) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
             if (Directory.Exists(dbDirectoryPath)) {
                 string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
                 if (File.Exists(tableFilePath)) {
                     List<string> lines = File.ReadAllLines(tableFilePath).ToList();
+                    List<string> newlines = new List<string>();
                     if (lines.Count > 0) {
-                        int index = 0;
+                        int count = 0;
                         foreach (string line in lines) {
-                            if (line.StartsWith(key)) {
-                                lines.RemoveAt(index);
-                                break;
+                            if (line.Split("|")[0] != key) {
+                                newlines.Add(line);
+                            } else {
+                                count++;
                             }
-
-                            index++;
                         }
-
-                        File.WriteAllLines(tableFilePath, lines);
+                        if (count > 0) {
+                            File.WriteAllLines(tableFilePath, newlines);
+                            return count;
+                        } else {
+                            send(new Message(MessageAction.ERROR, "Nu exista valoarea in tabel."));
+                        }     
+                    } else {
+                        send(new Message(MessageAction.ERROR, "Nu exista date in fisier."));
                     }
                 }
             }
+            
+            return 0;
         }
 
         public static List<string> getValuesByKey(string dbName, string tableName, string key) {
@@ -552,9 +561,22 @@ namespace Server {
                             return;
                         }
 
-                        //removeKVFromTableFile(currentDatabase, sqlQuery.DELETE_TABLE_NAME, index);
+                        //TODO: Verify if data exists in the kv file. And if condition name value exists. Delete all if primary key match the condition.
+                        List<string> kvIndexConcat = new List<string>();
+                        List<string> deletePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/PrimaryKeys");
+                        
+                        foreach (WhereCondition condition in sqlQuery.DELETE_TABLE_CONDITIONS) {
+                            if (deletePKs.Contains(condition.name)) {
+                                kvIndexConcat.Add(condition.value);
+                            }
+                        }
 
-                        send(new Message(MessageAction.SUCCESS, "Datele sterse cu succes din tabela '" + sqlQuery.DELETE_TABLE_NAME + "'!"));
+                        int deleted = removeKVFromTableFile(currentDatabase, sqlQuery.DELETE_TABLE_NAME, string.Join(String.Empty, kvIndexConcat));
+                        if (deleted > 0) {
+                            send(new Message(MessageAction.SUCCESS, "Datele sterse cu succes din tabela '" + sqlQuery.DELETE_TABLE_NAME + "'!"));
+                        } else {
+                            send(new Message(MessageAction.SUCCESS, "Datele nu au fost sterse!"));
+                        }
                         break;
 
                     default:

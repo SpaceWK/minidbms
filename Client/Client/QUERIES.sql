@@ -23,8 +23,11 @@ INSERT INTO groups (GroupID, SpecID) VALUES (531, 'I');
 
 
 #
-CREATE TABLE marks (StudID INT(10) REFERENCES students (StudID), DiscID VARCHAR(20) REFERENCES disciplines (DiscID), Mark INT, PRIMARY KEY (StudID,DiscID));
 
+insert into marks (StudID,DiscID,Mark) values (1,'DB1',10); 
+insert into marks (StudID,DiscID,Mark) values (1,'DS',9); 
+insert into marks (StudID,DiscID,Mark) values (2,'AI',9);
+insert into marks (StudID,DiscID,Mark) values (2,'CP',9);
 
 CREATE INDEX idx_StudID ON marks (StudID);
 CREATE INDEX idx_StudID ON marks (StudID, Mark);
