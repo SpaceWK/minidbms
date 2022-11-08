@@ -88,7 +88,7 @@ namespace Client {
                         Console.WriteLine("Baza de date: Nu este selectata.");
                     }
                     Console.WriteLine();
-                    Console.Write("Introdcuceti instructiunea SQL: ");
+                    Console.Write("Introduceti instructiunea SQL: ");
                     var query = Console.ReadLine();
                     send(new Message(MessageAction.SQL_QUERY_REQUEST, query));
 
