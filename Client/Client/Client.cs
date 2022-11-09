@@ -2,6 +2,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Xml.Linq;
 
 namespace Client {
     public class Program {
@@ -9,6 +10,8 @@ namespace Client {
 
         public static string currentDatabase;
         public static List<string> databasesList = new List<string>();
+        public static List<string> tablesList = new List<string>();
+        public static Dictionary<string, List<string>> tableData = new Dictionary<string, List<string>>();
 
         public static void Main(string[] args) {
             IPAddress ipAddress = Dns.GetHostEntry("localhost").AddressList[0];
@@ -46,10 +49,12 @@ namespace Client {
                 Console.ResetColor();
 
                 Console.WriteLine();
-                Console.WriteLine("------------------------------");
+                Console.WriteLine("------------------------------------------------------------");
                 Console.WriteLine();
             }
+            Console.ForegroundColor = ConsoleColor.DarkCyan;
             Console.WriteLine("Conectat la serverul ({0}).", client.RemoteEndPoint.ToString());
+            Console.ResetColor();
             Console.WriteLine();
             Console.WriteLine("Alegeti o optiune:");
             Console.WriteLine("  1. Lista baze de date");
@@ -82,7 +87,14 @@ namespace Client {
                     }
                     break;
                 case 2:
-                    // TODO
+                    if (currentDatabase != null) {
+                        tablesMenu();
+                    } else {
+                        Console.ForegroundColor = ConsoleColor.DarkYellow;
+                        Console.WriteLine("Baza de date: Nu este selectata.");
+                        Console.ResetColor();
+                        backMenu();
+                    }
                     break;
                 case 3:
                     if (currentDatabase != null) {
@@ -115,6 +127,54 @@ namespace Client {
             }
         }
 
+        public static void tablesMenu() {
+            Console.ForegroundColor = ConsoleColor.DarkGreen;
+            Console.WriteLine("Baza de date: {0}", currentDatabase);
+            Console.ResetColor();
+
+            Console.WriteLine();
+            if (tableData.Count() > 0) {
+                foreach (KeyValuePair<string, List<string>> item in tableData) {
+                    Console.Write(item.Key.PadRight(30));
+                }
+                Console.WriteLine();
+                Console.ForegroundColor = ConsoleColor.DarkGray;
+                for (int i = 0; i < tableData.Count(); i++) {
+                    foreach (KeyValuePair<string, List<string>> item in tableData) {
+                        if (i < item.Value.Count()) {
+                            Console.Write(tableData[item.Key][i].PadRight(30));
+                        } else {
+                            break;
+                        }
+                    }
+
+                    Console.WriteLine();
+                }
+                Console.ResetColor();
+
+                tableData.Clear();
+                backMenu();
+            } else {
+                if (tablesList.Count() > 0) {
+                    Console.WriteLine("Lista tabele:");
+                    foreach (string item in tablesList) {
+                        Console.WriteLine("  - {0}", item);
+                    }
+
+                    Console.WriteLine();
+                    Console.Write("Introduceti numele tabelei: ");
+                    var tableName = Console.ReadLine();
+                    send(new Message(MessageAction.GET_TABLE_DATA_REQUEST, tableName));
+
+                    receiveFromServer();
+                } else {
+                    send(new Message(MessageAction.GET_TABLES_REQUEST, currentDatabase));
+
+                    receiveFromServer();
+                }
+            }
+        }
+
         public static void backMenu() {
             Console.WriteLine();
             Console.WriteLine("Apasa ENTER pentru a reveni la meniul principal.");
@@ -135,6 +195,34 @@ namespace Client {
                         databasesList.Add(item);
                     }
                     menu(false, null, 1);
+                    break;
+                case MessageAction.GET_TABLES_RESPONSE:
+                    string[] tables = response.value.Split(",");
+                    foreach (string item in tables) {
+                        tablesList.Add(item);
+                    }
+                    menu(false, null, 2);
+                    break;
+                case MessageAction.GET_TABLE_DATA_RESPONSE:
+                    string[] data = response.value.Split(":");
+                    string[] tableFieldNames = data[0].Split(",");
+                    string[] tableFieldValues = data[1].Split("^");
+
+                    List<string> fieldValues;
+                    int index = 0;
+                    foreach (string name in tableFieldNames) {
+                        fieldValues = new List<string>();
+
+                        foreach (string item in tableFieldValues) {
+                            string[] values = item.Split("#");
+                            fieldValues.Add(values[index]);
+                        }
+
+                        tableData.Add(name, fieldValues);
+                        index++;
+                    }
+
+                    menu(false, null, 2);
                     break;
                 case MessageAction.SELECT_DATABASE:
                     currentDatabase = response.value;
