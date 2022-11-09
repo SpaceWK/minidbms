@@ -305,29 +305,30 @@ namespace Server {
                 string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
                 if (File.Exists(tableFilePath)) {
                     List<string> lines = File.ReadAllLines(tableFilePath).ToList();
-                    List<string> newlines = new List<string>();
+                    List<string> newLines = new List<string>();
                     if (lines.Count > 0) {
-                        int count = 0;
+                        int countDeletedLines = 0;
                         foreach (string line in lines) {
                             if (line.Split("|")[0] != key) {
-                                newlines.Add(line);
+                                newLines.Add(line);
                             } else {
-                                count++;
+                                countDeletedLines++;
                             }
                         }
-                        if (count > 0) {
-                            File.WriteAllLines(tableFilePath, newlines);
+                        if (countDeletedLines > 0) {
+                            File.WriteAllLines(tableFilePath, newLines);
+                            send(new Message(MessageAction.SUCCESS, "Datele sterse cu succes din tabela '" + tableName + "!"));
                             return;
                         } else {
                             send(new Message(MessageAction.ERROR, "Nu exista valoarea in tabel."));
+                            return;
                         }     
                     } else {
                         send(new Message(MessageAction.ERROR, "Nu exista date in fisier."));
+                        return;
                     }
                 }
             }
-            
-            return;
         }
 
         public static List<string> getValuesByKey(string dbName, string tableName, string key) {
@@ -634,7 +635,6 @@ namespace Server {
                         }
 
                         removeKVFromTableFile(currentDatabase, sqlQuery.DELETE_TABLE_NAME, string.Join(String.Empty, kvIndexConcat));
-                        send(new Message(MessageAction.SUCCESS, "Datele sterse cu succes din tabela '" + sqlQuery.DELETE_TABLE_NAME + "'!"));
                         break;
 
                     default:
