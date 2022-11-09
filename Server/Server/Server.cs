@@ -766,7 +766,7 @@ namespace Server {
                         matches = Regex.Matches(statement, pattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
                         if (matches.Count > 0) {
                             List<WhereCondition> whereConditions = new List<WhereCondition>();
-                            string[] conditions = matches[0].Split("AND", StringSplitOptions.TrimEntries);
+                            string[] conditions = Regex.Split(matches[0], " AND ", RegexOptions.IgnoreCase);
                             foreach (string condition in conditions) {
                                 string[] conditionArgs = condition.Split(" "); // Watch out for the conditions to be split by " ".
                                 switch (conditionArgs[1]) {
