@@ -41,7 +41,9 @@ namespace Server {
                 listener.Bind(ipEndPoint);
                 listener.Listen(100);
 
+                Console.ForegroundColor = ConsoleColor.DarkYellow;
                 Console.WriteLine("Se asteapta o conexiune...");
+                Console.ResetColor();
                 server = listener.Accept();
 
                 clientList();
@@ -61,11 +63,13 @@ namespace Server {
             }
         }
         public static void interpretResponse(Message response) {
+            DateTime dateTime = DateTime.Now;
+
             switch (response.action) {
                 case MessageAction.SQL_QUERY_REQUEST:
                     SQLQuery sqlQuery = parseStatement(response.value);
                     if (sqlQuery != null && sqlQuery.error == null) {
-                        Console.WriteLine("Executa query: {0}", response.value);
+                        Console.WriteLine("[" + dateTime.ToString("HH:MM:ss") + "] Executa query: {0}", response.value);
                         executeQuery(sqlQuery);
                     } else {
                         send(new Message(MessageAction.ERROR, sqlQuery.error));
@@ -74,6 +78,7 @@ namespace Server {
 
                 case MessageAction.GET_DATABASES_REQUEST:
                     catalog.Load("../../../Catalog.xml");
+                    Console.WriteLine("[" + dateTime.ToString("HH:MM:ss") + "] Lista baze de date.");
 
                     XmlNodeList databasesNodes = catalog.SelectNodes(@"//Databases/Database");
                     if (databasesNodes != null && databasesNodes.Count > 0) {
@@ -85,6 +90,63 @@ namespace Server {
                         send(new Message(MessageAction.GET_DATABASES_RESPONSE, String.Join(",", databasesNames)));
                     } else {
                         send(new Message(MessageAction.GET_DATABASES_RESPONSE, ""));
+                    }
+                    break;
+
+                case MessageAction.GET_TABLES_REQUEST:
+                    catalog.Load("../../../Catalog.xml");
+                    Console.WriteLine("[" + dateTime.ToString("HH:MM:ss") + "] Lista tabele din baza de date: {0}", response.value);
+
+                    XmlNodeList tablesNodes = catalog.SelectNodes(@"//Databases/Database[@databaseName='" + response.value + "']/Tables/Table");
+                    if (tablesNodes != null && tablesNodes.Count > 0) {
+                        List<string> tableNames = new List<string>();
+                        foreach (XmlNode item in tablesNodes) {
+                            tableNames.Add(item.Attributes["tableName"].Value);
+                        }
+
+                        send(new Message(MessageAction.GET_TABLES_RESPONSE, String.Join(",", tableNames)));
+                    } else {
+                        send(new Message(MessageAction.GET_TABLES_RESPONSE, ""));
+                    }
+                    break;
+
+                case MessageAction.GET_TABLE_DATA_REQUEST:
+                    catalog.Load("../../../Catalog.xml");
+                    Console.WriteLine("[" + dateTime.ToString("HH:MM:ss") + "] Lista date din tabela: {0}", response.value);
+
+                    XmlNodeList tableFieldsNodes = catalog.SelectNodes(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + response.value + "']/Structure/Attribute");
+                    if (tableFieldsNodes != null && tableFieldsNodes.Count > 0) {
+                        List<string> tableFields = new List<string>();
+                        foreach (XmlNode item in tableFieldsNodes) {
+                            tableFields.Add(item.Attributes["name"].Value);
+                        }
+
+                        /*
+                         * DiscID DName CreditNr
+                         * DB1|Databases 1#7
+                         * 
+                         * DiscID,DName,CreditNr:DB1|Databases 1#7^DB|Data Structures#6
+                        */
+
+                        string message = "";
+                        message += string.Join(",", tableFields);
+                        message += ":";
+
+                        string dbDirectoryPath = Path.Combine(workingPath, "Databases", currentDatabase);
+                        if (Directory.Exists(dbDirectoryPath)) {
+                            string tableFilePath = Path.Combine(dbDirectoryPath, response.value + ".kv");
+                            if (File.Exists(tableFilePath)) {
+                                List<string> lines = File.ReadAllLines(tableFilePath).ToList();
+                                if (lines.Count > 0) {
+                                    List<string> replaced = lines.Select(line => line.Replace("|", "#")).ToList();
+                                    message += string.Join("^", replaced);
+                                }
+                            }
+                        }
+
+                        send(new Message(MessageAction.GET_TABLE_DATA_RESPONSE, message));
+                    } else {
+                        send(new Message(MessageAction.ERROR, "Tabela '" + response.value + "' nu exista."));
                     }
                     break;
 
@@ -842,12 +904,16 @@ namespace Server {
 
         public static void error(string message) {
             Console.Clear();
+            Console.ForegroundColor = ConsoleColor.DarkRed;
             Console.WriteLine("Eroare: {0}", message);
+            Console.ResetColor();
         }
 
         public static void clientList() {
             Console.Clear();
+            Console.ForegroundColor = ConsoleColor.DarkCyan;
             Console.WriteLine("Client ({0}) conectat.", server.RemoteEndPoint.ToString());
+            Console.ResetColor();
             Console.WriteLine();
         }
     }
