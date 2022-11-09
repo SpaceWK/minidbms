@@ -37,10 +37,13 @@ namespace Client {
             Console.Clear();
             if (displayLastAction) {
                 if (lastAction.action == MessageAction.ERROR) {
+                    Console.ForegroundColor = ConsoleColor.DarkRed;
                     Console.WriteLine("Eroare: {0}", lastAction.value);
                 } else if (lastAction.action == MessageAction.SUCCESS) {
+                    Console.ForegroundColor = ConsoleColor.DarkGreen;
                     Console.WriteLine(lastAction.value);
                 }
+                Console.ResetColor();
 
                 Console.WriteLine();
                 Console.WriteLine("------------------------------");
@@ -83,10 +86,14 @@ namespace Client {
                     break;
                 case 3:
                     if (currentDatabase != null) {
+                        Console.ForegroundColor = ConsoleColor.DarkGreen;
                         Console.WriteLine("Baza de date: {0}", currentDatabase);
                     } else {
+                        Console.ForegroundColor = ConsoleColor.DarkYellow;
                         Console.WriteLine("Baza de date: Nu este selectata.");
                     }
+                    Console.ResetColor();
+
                     Console.WriteLine();
                     Console.Write("Introduceti instructiunea SQL: ");
                     var query = Console.ReadLine();
