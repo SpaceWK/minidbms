@@ -245,11 +245,10 @@ namespace Server {
                     List<string> lines = File.ReadAllLines(tableFilePath).ToList();
                     List<string> newLines = new List<string>();
                     if (lines.Count > 0) {
-                        int countDeletedLines = 0, countLeftLines = 0;
+                        int countDeletedLines = 0;
                         foreach (string line in lines) {
                             if (line.Split("|")[0] != key) {
                                 newLines.Add(line);
-                                countLeftLines++;
                             } else {
                                 countDeletedLines++;
                             }
