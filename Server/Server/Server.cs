@@ -237,7 +237,7 @@ namespace Server {
             }
         }
 
-        public static int removeKVFromTableFile(string dbName, string tableName, string key) {
+        public static void removeKVFromTableFile(string dbName, string tableName, string key) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
             if (Directory.Exists(dbDirectoryPath)) {
                 string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
@@ -255,7 +255,7 @@ namespace Server {
                         }
                         if (count > 0) {
                             File.WriteAllLines(tableFilePath, newlines);
-                            return count;
+                            return;
                         } else {
                             send(new Message(MessageAction.ERROR, "Nu exista valoarea in tabel."));
                         }     
@@ -265,7 +265,7 @@ namespace Server {
                 }
             }
             
-            return 0;
+            return;
         }
 
         public static List<string> getValuesByKey(string dbName, string tableName, string key) {
@@ -571,12 +571,8 @@ namespace Server {
                             }
                         }
 
-                        int deleted = removeKVFromTableFile(currentDatabase, sqlQuery.DELETE_TABLE_NAME, string.Join(String.Empty, kvIndexConcat));
-                        if (deleted > 0) {
-                            send(new Message(MessageAction.SUCCESS, "Datele sterse cu succes din tabela '" + sqlQuery.DELETE_TABLE_NAME + "'!"));
-                        } else {
-                            send(new Message(MessageAction.SUCCESS, "Datele nu au fost sterse."));
-                        }
+                        removeKVFromTableFile(currentDatabase, sqlQuery.DELETE_TABLE_NAME, string.Join(String.Empty, kvIndexConcat));
+                        send(new Message(MessageAction.SUCCESS, "Datele sterse cu succes din tabela '" + sqlQuery.DELETE_TABLE_NAME + "'!"));
                         break;
 
                     default:
