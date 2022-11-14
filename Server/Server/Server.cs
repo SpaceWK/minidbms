@@ -125,28 +125,13 @@ namespace Server {
                             tableFields.Add(item.Attributes["name"].Value);
                         }
 
-                        /*
-                         * DiscID DName CreditNr
-                         * DB1|Databases 1#7
-                         * 
-                         * DiscID,DName,CreditNr:DB1|Databases 1#7^DB|Data Structures#6
-                        */
-
                         string message = "";
                         message += string.Join(",", tableFields);
                         message += ":";
 
-                        string dbDirectoryPath = Path.Combine(workingPath, "Databases", currentDatabase);
-                        if (Directory.Exists(dbDirectoryPath)) {
-                            string tableFilePath = Path.Combine(dbDirectoryPath, response.value + ".kv");
-                            if (File.Exists(tableFilePath)) {
-                                List<string> lines = File.ReadAllLines(tableFilePath).ToList();
-                                if (lines.Count > 0) {
-                                    List<string> replaced = lines.Select(line => line.Replace("|", "#")).ToList();
-                                    message += string.Join("^", replaced);
-                                }
-                            }
-                        }
+                        List<Record> records = mongoDBService.getAll(currentDatabase, response.value);
+                        List<string> data = records.Select(record => string.Join("#", record.key, record.value)).ToList();
+                        message += string.Join("^", data);
 
                         send(new Message(MessageAction.GET_TABLE_DATA_RESPONSE, message));
                     } else {
@@ -380,7 +365,8 @@ namespace Server {
                             @"//Databases/Database[@databaseName='" + sqlQuery.CREATE_DATABASE_NAME + "']"
                         );
 
-                        createDBDirectory(sqlQuery.CREATE_DATABASE_NAME);
+                        //createDBDirectory(sqlQuery.CREATE_DATABASE_NAME);
+                        mongoDBService.createDatabase(sqlQuery.CREATE_DATABASE_NAME);
 
                         currentDatabase = sqlQuery.CREATE_DATABASE_NAME;
                         send(new Message(MessageAction.SELECT_DATABASE, sqlQuery.CREATE_DATABASE_NAME));
@@ -535,10 +521,10 @@ namespace Server {
                         } // TODO: Maybe check here for table PKs, don't use as index.
 
                         
-                        FileStream createIndexIND = createFile(currentDatabase, sqlQuery.CREATE_INDEX_NAME, ".ind"); ;
+                        /*FileStream createIndexIND = createFile(currentDatabase, sqlQuery.CREATE_INDEX_NAME, ".ind"); ;
                         if (createIndexIND != null) {
                             createIndexIND.Dispose();
-                        }
+                        }*/
 
                         send(new Message(MessageAction.SUCCESS, "Index '" + sqlQuery.CREATE_INDEX_NAME + "' creat cu succes!"));
                         break;
@@ -554,7 +540,8 @@ namespace Server {
                             @"//Databases"
                         );
 
-                        removeDBDirectory(sqlQuery.DROP_DATABASE_NAME);
+                        //removeDBDirectory(sqlQuery.DROP_DATABASE_NAME);
+                        mongoDBService.removeDatabase(sqlQuery.DROP_DATABASE_NAME);
 
                         currentDatabase = null;
                         send(new Message(MessageAction.SUCCESS, "Baza de date '" + sqlQuery.DROP_DATABASE_NAME + "' stearsa cu succes!"));
@@ -576,7 +563,7 @@ namespace Server {
                         );
 
                         //removeFile(currentDatabase, sqlQuery.DROP_TABLE_NAME, ".kv");
-                        mongoDBService.removeCollection(sqlQuery.DROP_TABLE_NAME);
+                        mongoDBService.removeCollection(currentDatabase, sqlQuery.DROP_TABLE_NAME);
 
                         send(new Message(MessageAction.SUCCESS, "Tabela '" + sqlQuery.DROP_TABLE_NAME + "' stearsa cu succes!"));
                         break;
@@ -648,7 +635,8 @@ namespace Server {
                             }
                         }
 
-                        removeKVFromTableFile(currentDatabase, sqlQuery.DELETE_TABLE_NAME, string.Join(String.Empty, kvIndexConcat));
+                        //removeKVFromTableFile(currentDatabase, sqlQuery.DELETE_TABLE_NAME, string.Join(String.Empty, kvIndexConcat));
+                        mongoDBService.remove(currentDatabase, sqlQuery.DELETE_TABLE_NAME, string.Join(String.Empty, kvIndexConcat));
                         break;
 
                     default:
