@@ -1,4 +1,5 @@
-﻿using System;
+﻿using MongoDB.Driver;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
@@ -20,6 +21,7 @@ namespace Server {
     public class Program {
         public static Socket server;
         public static XmlDocument catalog = new XmlDocument();
+        public static MongoDBService mongoDBService;
 
         public static string currentDatabase;
 
@@ -32,6 +34,8 @@ namespace Server {
             if (!Directory.Exists(dbDirectoryPath)) {
                 Directory.CreateDirectory(Path.Combine(dbDirectoryPath, "Databases"));
             }
+
+            mongoDBService = new MongoDBService();
 
             IPAddress ipAddress = Dns.GetHostEntry("localhost").AddressList[0];
             IPEndPoint ipEndPoint = new IPEndPoint(ipAddress, 11000);
@@ -490,10 +494,11 @@ namespace Server {
                             }
                         }
 
-                        FileStream createTableKV = createFile(currentDatabase, sqlQuery.CREATE_TABLE_NAME, ".kv");
+                        /*FileStream createTableKV = createFile(currentDatabase, sqlQuery.CREATE_TABLE_NAME, ".kv");
                         if (createTableKV != null) {
                             createTableKV.Dispose();
-                        }
+                        }*/
+                        mongoDBService.createCollection(currentDatabase, sqlQuery.CREATE_TABLE_NAME);
 
                         send(new Message(MessageAction.SUCCESS, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' creata cu succes!"));
                         break;
@@ -570,7 +575,8 @@ namespace Server {
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables"
                         );
 
-                        removeFile(currentDatabase, sqlQuery.DROP_TABLE_NAME, ".kv");
+                        //removeFile(currentDatabase, sqlQuery.DROP_TABLE_NAME, ".kv");
+                        mongoDBService.removeCollection(sqlQuery.DROP_TABLE_NAME);
 
                         send(new Message(MessageAction.SUCCESS, "Tabela '" + sqlQuery.DROP_TABLE_NAME + "' stearsa cu succes!"));
                         break;
@@ -608,8 +614,16 @@ namespace Server {
                                 values.Add(attribute.Value);
                             }
                         }
-                        
-                        appendKVInTableFile(currentDatabase, sqlQuery.INSERT_TABLE_NAME, string.Join(String.Empty, keyConcat), values);
+
+                        //appendKVInTableFile(currentDatabase, sqlQuery.INSERT_TABLE_NAME, string.Join(String.Empty, keyConcat), values);
+                        mongoDBService.insert(
+                            currentDatabase,
+                            sqlQuery.INSERT_TABLE_NAME,
+                            new Record(
+                                string.Join(String.Empty, keyConcat),
+                                string.Join("#", values)
+                            )
+                        );
 
                         send(new Message(MessageAction.SUCCESS, "Datele inserate cu succes in tabela '" + sqlQuery.INSERT_TABLE_NAME + "'!"));
                         break;
