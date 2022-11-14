@@ -11,7 +11,22 @@ namespace Server {
         public MongoClient mongoClient;
 
         public MongoDBService() {
-            this.mongoClient = new MongoClient("mongodb://localhost:27017");
+            this.mongoClient = new MongoClient("");
+        }
+
+        public bool createDatabase(string dbName) {
+            IMongoDatabase mongoDB = this.mongoClient.GetDatabase(dbName);
+            if (mongoDB != null) {
+                return true;
+            }
+
+            return false;
+        }
+
+        public bool removeDatabase(string dbName) {
+            this.mongoClient.DropDatabase(dbName);
+            
+            return true;
         }
 
         public bool createCollection(string dbName, string tableName) {
