@@ -342,6 +342,11 @@ namespace Server {
             return null;
         }
 
+        //public static bool verifyIfDataExistInTheCollection(MongoDBService mongodb) {
+        //    mongodb.get
+        //    return true;
+        //}
+
         public static void executeQuery(SQLQuery sqlQuery) {
             catalog.Load("../../../Catalog.xml");
 
@@ -598,9 +603,13 @@ namespace Server {
                             return;
                         }
 
+                        string uniqueKey = String.Empty;
                         List<string> keyConcat = new List<string>();
                         List<string> values = new List<string>();
                         List<string> insertPKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/PrimaryKeys");
+                        List<string> insertFKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/ForeignKeys");
+                        List<string> insertUKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/UniqueKeys");
+                        List<string> insertIndexes = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/IndexFiles");
                         // string indexKeys = getXmlNodeValue(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.inse + "']/IndexAttributes");
 
                         foreach (KeyValuePair<string, string> attribute in sqlQuery.INSERT_TABLE_ATTRIBUTES_VALUES) {
@@ -612,6 +621,24 @@ namespace Server {
                             }
                         }
 
+                        if (insertUKs.Count > 0) {
+                            foreach (KeyValuePair<string, string> attribute in sqlQuery.INSERT_TABLE_ATTRIBUTES_VALUES) {
+                                if (insertUKs.Contains(attribute.Key)) {
+                                    uniqueKey = attribute.Value;
+
+                                    mongoDBService.insert(
+                                        currentDatabase,
+                                        "idx_" + sqlQuery.INSERT_TABLE_NAME + "_" + attribute.Key,
+                                        new Record(
+                                            string.Join(String.Empty, uniqueKey),
+                                            string.Join("#", keyConcat)
+                                        )
+                                    );
+                                }
+                                List<object> keys = new List<object>();
+                                keys.Add(mongoDBService.getAll(currentDatabase, "idx_" + sqlQuery.INSERT_TABLE_NAME + "_" + attribute.Key));
+                            }
+                        }
                         //appendKVInTableFile(currentDatabase, sqlQuery.INSERT_TABLE_NAME, string.Join(String.Empty, keyConcat), values);
                         mongoDBService.insert(
                             currentDatabase,
@@ -619,8 +646,8 @@ namespace Server {
                             new Record(
                                 string.Join(String.Empty, keyConcat),
                                 string.Join("#", values)
-                            )
-                        );
+                                )
+                            );
 
                         // !! TODO: Check for attribute if UNIQUE and don't allow INSERT with same value.
 
