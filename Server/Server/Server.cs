@@ -470,13 +470,18 @@ namespace Server {
                                     createXmlNodeWithAttributes("ReferenceAttribute", new Dictionary<string, string> { }, attribute.foreignKeyTableReferenceKey),
                                     @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/ForeignKeys/ForeignKey[@name='" + attribute.name + "']/References[@tableName='" + attribute.foreignKeyTableReferenceName + "']"
                                 );
+
                                 // TODO: Can be more foreign attributes and referenced table attributes.
+
+                                mongoDBService.createCollection(currentDatabase, "idx_" + attribute.foreignKeyTableReferenceName + "_" + attribute.name);
                             }
                             if (attribute.isUnique) {
                                 appendXmlNodeTo(
                                     createXmlNodeWithAttributes("UniqueKeyAttribute", new Dictionary<string, string> { }, attribute.name),
                                     @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_TABLE_NAME + "']/UniqueKeys"
                                 );
+
+                                mongoDBService.createCollection(currentDatabase, "idx_" + sqlQuery.CREATE_TABLE_NAME + "_" + attribute.name);
                             }
                         }
 
@@ -520,11 +525,16 @@ namespace Server {
                             }
                         } // TODO: Maybe check here for table PKs, don't use as index.
 
-                        
+
                         /*FileStream createIndexIND = createFile(currentDatabase, sqlQuery.CREATE_INDEX_NAME, ".ind"); ;
                         if (createIndexIND != null) {
                             createIndexIND.Dispose();
                         }*/
+
+                        // !! TODO: Check in XML if index with the same name exists before creating another collection.
+                        mongoDBService.createCollection(currentDatabase, sqlQuery.CREATE_INDEX_NAME); // TODO: Maybe rename index as idx_TABLENAME_KEYNAME.
+
+                        // !! TODO: Get data from table (sqlQuery.CREATE_INDEX_TABLE_NAME) and add it in the new index collection too.
 
                         send(new Message(MessageAction.SUCCESS, "Index '" + sqlQuery.CREATE_INDEX_NAME + "' creat cu succes!"));
                         break;
@@ -612,6 +622,8 @@ namespace Server {
                             )
                         );
 
+                        // !! TODO: Get table indexes from XML and insert data into that index collections too.
+
                         send(new Message(MessageAction.SUCCESS, "Datele inserate cu succes in tabela '" + sqlQuery.INSERT_TABLE_NAME + "'!"));
                         break;
                         
@@ -624,6 +636,9 @@ namespace Server {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.DELETE_TABLE_NAME + "' nu exista."));
                             return;
                         }
+
+                        // !! TODO: Check table foreign key before delete.
+                        // !! TODO: Delete from both the table and the index collections.
 
                         //TODO: Verify if data exists in the kv file. And if condition name value exists. Delete all if primary key match the condition.
                         List<string> kvIndexConcat = new List<string>();
