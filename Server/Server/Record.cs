@@ -12,9 +12,23 @@ namespace Server {
         public string key { get; set; }
         public string value { get; set; }
 
-    public Record(string key, string value) {
+        public Record(string key, string value) {
             this.key = key;
             this.value = value;
+        }
+
+        public string getKeyValue(string key, List<string> structure) {
+            int index = 0;
+            string[] values = this.value.Split("#");
+            foreach (string item in structure) {
+                if (item == key) {
+                    return values[index];
+                }
+
+                index++;
+            }
+
+            return null;
         }
     }
 }

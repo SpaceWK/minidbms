@@ -221,6 +221,19 @@ namespace Server {
             return values;
         }
 
+        public static List<string> getXmlNodeChildrenAttributeValues(string nodeNamePath, string attributeName) {
+            List <string> values = new List<string>();
+            XmlNode parent = catalog.SelectSingleNode(nodeNamePath);
+            if (parent != null) {
+                XmlNodeList children = parent.ChildNodes;
+                foreach (XmlNode child in children) {
+                    values.Add(child.Attributes[attributeName].Value);
+                }
+            }
+
+            return values;
+        }
+
         public static void createDBDirectory(string dbName) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases");
             if (Directory.Exists(dbDirectoryPath)) {
@@ -496,7 +509,7 @@ namespace Server {
 
                     case SQLQueryType.CREATE_INDEX:
                         if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']")) {
-                            send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' nu exista."));
+                            send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.CREATE_INDEX_TABLE_NAME + "' nu exista."));
                             return;
                         }
                         if (xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexName='" + sqlQuery.CREATE_INDEX_NAME + "']")) {
@@ -506,35 +519,71 @@ namespace Server {
 
                         appendXmlNodeTo(
                             createXmlNodeWithAttributes("IndexFile", new Dictionary<string, string> {
+                                { "indexName", sqlQuery.CREATE_INDEX_NAME },
                                 { "indexFileName", sqlQuery.CREATE_INDEX_NAME + ".b" }
                             }),
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles"
                         );
                         appendXmlNodeTo(
                             createXmlNodeWithAttributes("IndexAttributes", new Dictionary<string, string> { }),
-                            @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.CREATE_INDEX_NAME + ".b" + "']"
+                            @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexName='" + sqlQuery.CREATE_INDEX_NAME + "']"
                         );
 
+                        bool ok = true;
                         List<string> createIndexPKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/PrimaryKeys");
                         foreach (string indexAttribute in sqlQuery.CREATE_INDEX_TABLE_FIELDS) {
                             if (!createIndexPKs.Contains(indexAttribute)) {
                                 appendXmlNodeTo(
                                     createXmlNodeWithAttributes("IndexAttribute", new Dictionary<string, string> { }, indexAttribute),
-                                    @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.CREATE_INDEX_NAME + ".b" + "']/IndexAttributes"
+                                    @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexName='" + sqlQuery.CREATE_INDEX_NAME + "']/IndexAttributes"
                                 );
+                            } else {
+                                send(new Message(MessageAction.ERROR, "Indexul nu se creeaza pe cheia primara '" + indexAttribute + "'."));
+                                break;
                             }
-                        } // TODO: Maybe check here for table PKs, don't use as index.
+                        }
 
+                        if (!ok) {
+                            break;
+                        }
 
                         /*FileStream createIndexIND = createFile(currentDatabase, sqlQuery.CREATE_INDEX_NAME, ".ind"); ;
                         if (createIndexIND != null) {
                             createIndexIND.Dispose();
                         }*/
 
-                        // !! TODO: Check in XML if index with the same name exists before creating another collection.
-                        mongoDBService.createCollection(currentDatabase, sqlQuery.CREATE_INDEX_NAME); // TODO: Maybe rename index as idx_TABLENAME_KEYNAME.
+                        bool createIndexCollection = mongoDBService.createCollection(currentDatabase, sqlQuery.CREATE_INDEX_NAME); // TODO: Maybe rename index as idx_TABLENAME_KEYNAME.
+                        if (!createIndexCollection) {
+                            send(new Message(MessageAction.ERROR, "Indexul '" + sqlQuery.CREATE_INDEX_NAME + "' nu a fost creat."));
+                            break;
+                        }
 
-                        // !! TODO: Get data from table (sqlQuery.CREATE_INDEX_TABLE_NAME) and add it in the new index collection too.
+                        // Get data from table (sqlQuery.CREATE_INDEX_TABLE_NAME) and add it in the new index collection too.
+                        // CREATE INDEX idx_DName ON disciplines (DName);
+                        // _id: CP
+                        // value: C Programming#8
+                        // DiscID DName CredirNr
+                        List<Record> records = mongoDBService.getAll(currentDatabase, sqlQuery.CREATE_INDEX_TABLE_NAME);
+                        if (records.Count() > 0) {
+                            List<string> createIndexIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexName='" + sqlQuery.CREATE_INDEX_NAME + "']/IndexAttributes");
+                            
+                            if (createIndexIDXs.Count() > 0) {
+                                List<string> createIndexAttributes = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/Structure", "name");
+                                createIndexAttributes.RemoveAll(name => createIndexPKs.Contains(name));
+
+                                foreach (Record record in records) {
+                                    foreach (string indexAttribute in createIndexIDXs) {
+                                        string indexAttributeValue = record.getKeyValue(indexAttribute, createIndexAttributes);
+                                        // Concat index attribute values when multiple keys are used: (StudID,Mark)
+                                        mongoDBService.insert(
+                                            currentDatabase,
+                                            sqlQuery.CREATE_INDEX_NAME,
+                                            new Record(indexAttributeValue, record.key)
+                                        );
+                                    }
+                                }
+                            }
+                        }
 
                         send(new Message(MessageAction.SUCCESS, "Index '" + sqlQuery.CREATE_INDEX_NAME + "' creat cu succes!"));
                         break;
