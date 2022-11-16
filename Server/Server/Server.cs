@@ -622,6 +622,8 @@ namespace Server {
                             )
                         );
 
+                        // !! TODO: Check for attribute if UNIQUE and don't allow INSERT with same value.
+
                         // !! TODO: Get table indexes from XML and insert data into that index collections too.
 
                         send(new Message(MessageAction.SUCCESS, "Datele inserate cu succes in tabela '" + sqlQuery.INSERT_TABLE_NAME + "'!"));
@@ -640,7 +642,6 @@ namespace Server {
                         // !! TODO: Check table foreign key before delete.
                         // !! TODO: Delete from both the table and the index collections.
 
-                        //TODO: Verify if data exists in the kv file. And if condition name value exists. Delete all if primary key match the condition.
                         List<string> kvIndexConcat = new List<string>();
                         List<string> deletePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/PrimaryKeys");
                         
