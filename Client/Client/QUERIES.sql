@@ -22,20 +22,37 @@ CREATE TABLE groups (GroupID INT PRIMARY KEY, SpecID VARCHAR(20) REFERENCES spec
 INSERT INTO groups (GroupID, SpecID) VALUES (531, 'I');
 
 
-#
+# Students
+CREATE TABLE students (StudID INT PRIMARY KEY, GroupID INT REFERENCES groups (GroupID));
 
-insert into marks (StudID,DiscID,Mark) values (1,'DB1',10); 
-insert into marks (StudID,DiscID,Mark) values (1,'DS',9); 
-insert into marks (StudID,DiscID,Mark) values (2,'AI',9);
-insert into marks (StudID,DiscID,Mark) values (2,'CP',9);
+INSERT INTO students (StudID, GroupId, StudName, Email) VALUES (1, 531, 'John Foreman', 'JohnForeman@email.com');
+INSERT INTO students (StudID, GroupId, StudName, Email) VALUES (2, 531, 'Ashley Cole', 'AshleyCole@email.com');
+INSERT INTO students (StudID, GroupId, StudName, Email) VALUES (8, 532, 'Nicolas Pitt', 'NicolasPitt@email.com');
 
+
+# Marks
+CREATE TABLE marks (StudID INT(10) REFERENCES students (StudID), DiscID VARCHAR(20) REFERENCES disciplines (DiscID), Mark INT, PRIMARY KEY (StudID,DiscID));
+
+INSERT INTO marks (StudID, DiscID, Mark) values (1, 'DB1', 10);
+INSERT INTO marks (StudID, DiscID, Mark) values (1, 'DS', 9);
+
+
+# Index
 CREATE INDEX idx_StudID ON marks (StudID);
-CREATE INDEX idx_StudID ON marks (StudID, Mark);
+CREATE INDEX idx_StudIDMark ON marks (StudID,Mark);
 
 
-DROP DATABASE db;
+# Delete
+DELETE FROM marks WHERE StudID = 50 AND DiscID = 'OOP';
+DELETE FROM marks WHERE StudID = 49 AND DiscID = 'OOP';
+
+DELETE FROM students WHERE StudID = 50;
+DELETE FROM students WHERE GroupID = 531;
+
+
+# Select
+# TODO
+
+
 DROP TABLE marks;
-
-
-INSERT INTO marks (StudID, DiscID, Mark) VALUES (1, 'OOP', 5);
-DELETE FROM marks WHERE StudID = 1 AND DiscID = 'OOP';
+DROP DATABASE db;
