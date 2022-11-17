@@ -2,6 +2,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.SqlTypes;
 using System.Diagnostics.Metrics;
 using System.IO;
@@ -232,6 +233,19 @@ namespace Server {
             }
 
             return values;
+        }
+
+        public static List<ForeignKey> getXmlTableForeignKeys(string tableName) {
+            List<ForeignKey> foreignKeys = new List<ForeignKey>();
+            List<string> tableFKs = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + tableName + "']/ForeignKeys", "name");
+            foreach (string fkName in tableFKs) {
+                string fkAttributeName = getXmlNodeValue(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + tableName + "']/ForeignKeys/ForeignKey[@name='" + fkName + "']/ForeignKeyAttribute");
+                List<string> fkReferencedTableAndKey = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + tableName + "']/ForeignKeys/ForeignKey[@name='" + fkName + "']/References");
+
+                foreignKeys.Add(new ForeignKey(fkAttributeName, fkReferencedTableAndKey[0], fkReferencedTableAndKey[1]));
+            }
+            
+            return foreignKeys;
         }
 
         public static void createDBDirectory(string dbName) {
@@ -529,7 +543,6 @@ namespace Server {
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexName='" + sqlQuery.CREATE_INDEX_NAME + "']"
                         );
 
-                        bool ok = true;
                         List<string> createIndexPKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/PrimaryKeys");
                         foreach (string indexAttribute in sqlQuery.CREATE_INDEX_TABLE_FIELDS) {
                             if (!createIndexPKs.Contains(indexAttribute)) {
@@ -538,14 +551,9 @@ namespace Server {
                                     @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexName='" + sqlQuery.CREATE_INDEX_NAME + "']/IndexAttributes"
                                 );
                             } else {
-                                ok = false;
                                 send(new Message(MessageAction.ERROR, "Indexul nu se creeaza pe cheia primara '" + indexAttribute + "'."));
-                                break;
+                                return;
                             }
-                        }
-
-                        if (!ok) {
-                            break;
                         }
 
                         /*FileStream createIndexIND = createFile(currentDatabase, sqlQuery.CREATE_INDEX_NAME, ".ind"); ;
@@ -556,7 +564,7 @@ namespace Server {
                         bool createIndexCollection = mongoDBService.createCollection(currentDatabase, sqlQuery.CREATE_INDEX_NAME); // TODO: Maybe rename index as idx_TABLENAME_KEYNAME.
                         if (!createIndexCollection) {
                             send(new Message(MessageAction.ERROR, "Indexul '" + sqlQuery.CREATE_INDEX_NAME + "' nu a fost creat."));
-                            break;
+                            return;
                         }
 
                         List<Record> records = mongoDBService.getAll(currentDatabase, sqlQuery.CREATE_INDEX_TABLE_NAME);
@@ -614,6 +622,17 @@ namespace Server {
                         if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DROP_TABLE_NAME + "']")) {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.DROP_TABLE_NAME + "' nu exista."));
                             return;
+                        }
+                        List<string> allTableNames = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables", "tableName");
+                        allTableNames.Remove(sqlQuery.DROP_TABLE_NAME);
+                        if (allTableNames.Count() > 0) {
+                            foreach (string tableName in allTableNames) {
+                                List<string> referenceTableNames = getXmlTableForeignKeys(tableName).Select(fk => fk.referencedTableName).ToList();
+                                if (referenceTableNames.Count() > 0 && referenceTableNames.Contains(sqlQuery.DROP_TABLE_NAME)) {
+                                    send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.DROP_TABLE_NAME + "' nu poate fi eliminata, deoarece este referentiata de o cheie straina."));
+                                    return;
+                                }
+                            }
                         }
 
                         removeXmlNodeFrom(
