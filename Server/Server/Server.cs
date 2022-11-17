@@ -538,6 +538,7 @@ namespace Server {
                                     @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexName='" + sqlQuery.CREATE_INDEX_NAME + "']/IndexAttributes"
                                 );
                             } else {
+                                ok = false;
                                 send(new Message(MessageAction.ERROR, "Indexul nu se creeaza pe cheia primara '" + indexAttribute + "'."));
                                 break;
                             }
@@ -558,11 +559,6 @@ namespace Server {
                             break;
                         }
 
-                        // Get data from table (sqlQuery.CREATE_INDEX_TABLE_NAME) and add it in the new index collection too.
-                        // CREATE INDEX idx_DName ON disciplines (DName);
-                        // _id: CP
-                        // value: C Programming#8
-                        // DiscID DName CredirNr
                         List<Record> records = mongoDBService.getAll(currentDatabase, sqlQuery.CREATE_INDEX_TABLE_NAME);
                         if (records.Count() > 0) {
                             List<string> createIndexIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexName='" + sqlQuery.CREATE_INDEX_NAME + "']/IndexAttributes");
@@ -572,15 +568,19 @@ namespace Server {
                                 createIndexAttributes.RemoveAll(name => createIndexPKs.Contains(name));
 
                                 foreach (Record record in records) {
+                                    string indexAttributeValue = "";
                                     foreach (string indexAttribute in createIndexIDXs) {
-                                        string indexAttributeValue = record.getKeyValue(indexAttribute, createIndexAttributes);
-                                        // Concat index attribute values when multiple keys are used: (StudID,Mark)
-                                        mongoDBService.insert(
-                                            currentDatabase,
-                                            sqlQuery.CREATE_INDEX_NAME,
-                                            new Record(indexAttributeValue, record.key)
+                                        indexAttributeValue = string.Concat(
+                                            indexAttributeValue,
+                                            record.getKeyValue(indexAttribute, createIndexAttributes)
                                         );
                                     }
+
+                                    mongoDBService.insert(
+                                        currentDatabase,
+                                        sqlQuery.CREATE_INDEX_NAME,
+                                        new Record(indexAttributeValue, record.key)
+                                    );  
                                 }
                             }
                         }
