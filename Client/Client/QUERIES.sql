@@ -38,8 +38,8 @@ INSERT INTO marks (StudID, DiscID, Mark) values (1, 'DS', 9);
 
 
 # Index
-CREATE INDEX idx_StudID ON marks (StudID);
-CREATE INDEX idx_StudIDMark ON marks (StudID,Mark);
+CREATE INDEX idx_marks_StudID ON marks (StudID);
+CREATE INDEX idx_marks_StudIDMark ON marks (StudID,Mark);
 
 
 # Delete
