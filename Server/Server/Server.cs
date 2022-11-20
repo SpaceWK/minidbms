@@ -248,105 +248,6 @@ namespace Server {
             return foreignKeys;
         }
 
-        public static void createDBDirectory(string dbName) {
-            string dbDirectoryPath = Path.Combine(workingPath, "Databases");
-            if (Directory.Exists(dbDirectoryPath)) {
-                Directory.CreateDirectory(Path.Combine(dbDirectoryPath, dbName));
-            }
-        }
-
-        public static void removeDBDirectory(string dbName) {
-            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
-            if (Directory.Exists(dbDirectoryPath)) {
-                Directory.Delete(dbDirectoryPath, true);
-            }
-        }
-
-        public static FileStream createFile(string dbName, string fileName, string extension) {
-            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
-            if (Directory.Exists(dbDirectoryPath)) {
-                string filePath = Path.Combine(dbDirectoryPath, fileName + extension);
-                if (!File.Exists(filePath)) {
-                    return File.Create(filePath);
-                }
-            }
-
-            return null;
-        }
-
-        public static void removeFile(string dbName, string fileName, string extension) {
-            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
-            if (Directory.Exists(dbDirectoryPath)) {
-                string filePath = Path.Combine(dbDirectoryPath, fileName + extension);
-                if (File.Exists(filePath)) {
-                    File.Delete(filePath);
-                }
-            }
-        }
-
-        public static void appendKVInTableFile(string dbName, string tableName, string key, List<string> values) {
-            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
-            if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
-                if (File.Exists(tableFilePath)) {
-                    string value = string.Join("#", values);
-                    File.AppendAllLines(tableFilePath, new string[] { key + "|" + value });
-                }
-            }
-        }
-
-        public static void appendINDInIndexFile(string dbName, string indexName, string key, string value) {
-            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
-            if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, indexName + ".ind");
-                if (File.Exists(tableFilePath)) {
-                    File.AppendAllLines(tableFilePath, new string[] { key + "|" + value });
-                }
-            }
-        }
-
-        public static void clearKVTableFile(string dbName, string tableName) {
-            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
-            if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
-                if (File.Exists(tableFilePath)) {
-                    File.WriteAllText(tableFilePath, String.Empty);
-                }
-            }
-        }
-
-        public static void removeKVFromTableFile(string dbName, string tableName, string key) {
-            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
-            if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
-                if (File.Exists(tableFilePath)) {
-                    List<string> lines = File.ReadAllLines(tableFilePath).ToList();
-                    List<string> newLines = new List<string>();
-                    if (lines.Count > 0) {
-                        int countDeletedLines = 0;
-                        foreach (string line in lines) {
-                            if (line.Split("|")[0] != key) {
-                                newLines.Add(line);
-                            } else {
-                                countDeletedLines++;
-                            }
-                        }
-                        if (countDeletedLines > 0) {
-                            File.WriteAllLines(tableFilePath, newLines);
-                            send(new Message(MessageAction.SUCCESS, "Datele sterse cu succes din tabela '" + tableName + "!"));
-                            return;
-                        } else {
-                            send(new Message(MessageAction.ERROR, "Nu exista valoarea in tabel."));
-                            return;
-                        }     
-                    } else {
-                        send(new Message(MessageAction.ERROR, "Nu exista date in fisier."));
-                        return;
-                    }
-                }
-            }
-        }
-
         public static List<string> getValuesByKey(string dbName, string tableName, string key) {
             string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
             if (Directory.Exists(dbDirectoryPath)) {
@@ -392,7 +293,6 @@ namespace Server {
                             @"//Databases/Database[@databaseName='" + sqlQuery.CREATE_DATABASE_NAME + "']"
                         );
 
-                        //createDBDirectory(sqlQuery.CREATE_DATABASE_NAME);
                         mongoDBService.createDatabase(sqlQuery.CREATE_DATABASE_NAME);
 
                         currentDatabase = sqlQuery.CREATE_DATABASE_NAME;
@@ -512,16 +412,14 @@ namespace Server {
                             }
                         }
 
-                        /*FileStream createTableKV = createFile(currentDatabase, sqlQuery.CREATE_TABLE_NAME, ".kv");
-                        if (createTableKV != null) {
-                            createTableKV.Dispose();
-                        }*/
                         mongoDBService.createCollection(currentDatabase, sqlQuery.CREATE_TABLE_NAME);
 
                         send(new Message(MessageAction.SUCCESS, "Tabela '" + sqlQuery.CREATE_TABLE_NAME + "' creata cu succes!"));
                         break;
 
                     case SQLQueryType.CREATE_INDEX:
+                        // !!! Create index name should match the following structure when executed: idx_TABLE-NAME_KEYS-NAMES
+
                         if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']")) {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.CREATE_INDEX_TABLE_NAME + "' nu exista."));
                             return;
@@ -533,8 +431,7 @@ namespace Server {
 
                         appendXmlNodeTo(
                             createXmlNodeWithAttributes("IndexFile", new Dictionary<string, string> {
-                                { "indexName", sqlQuery.CREATE_INDEX_NAME },
-                                { "indexFileName", sqlQuery.CREATE_INDEX_NAME + ".b" }
+                                { "indexName", sqlQuery.CREATE_INDEX_NAME }
                             }),
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles"
                         );
@@ -551,17 +448,12 @@ namespace Server {
                                     @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexName='" + sqlQuery.CREATE_INDEX_NAME + "']/IndexAttributes"
                                 );
                             } else {
-                                send(new Message(MessageAction.ERROR, "Indexul nu se creeaza pe cheia primara '" + indexAttribute + "'."));
+                                send(new Message(MessageAction.ERROR, "Nu se poate creea index pe cheia primara '" + indexAttribute + "'."));
                                 return;
                             }
                         }
 
-                        /*FileStream createIndexIND = createFile(currentDatabase, sqlQuery.CREATE_INDEX_NAME, ".ind"); ;
-                        if (createIndexIND != null) {
-                            createIndexIND.Dispose();
-                        }*/
-
-                        bool createIndexCollection = mongoDBService.createCollection(currentDatabase, sqlQuery.CREATE_INDEX_NAME); // TODO: Maybe rename index as idx_TABLENAME_KEYNAME.
+                        bool createIndexCollection = mongoDBService.createCollection(currentDatabase, sqlQuery.CREATE_INDEX_NAME);
                         if (!createIndexCollection) {
                             send(new Message(MessageAction.ERROR, "Indexul '" + sqlQuery.CREATE_INDEX_NAME + "' nu a fost creat."));
                             return;
@@ -607,7 +499,6 @@ namespace Server {
                             @"//Databases"
                         );
 
-                        //removeDBDirectory(sqlQuery.DROP_DATABASE_NAME);
                         mongoDBService.removeDatabase(sqlQuery.DROP_DATABASE_NAME);
 
                         currentDatabase = null;
@@ -640,7 +531,6 @@ namespace Server {
                             @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables"
                         );
 
-                        //removeFile(currentDatabase, sqlQuery.DROP_TABLE_NAME, ".kv");
                         mongoDBService.removeCollection(currentDatabase, sqlQuery.DROP_TABLE_NAME);
 
                         send(new Message(MessageAction.SUCCESS, "Tabela '" + sqlQuery.DROP_TABLE_NAME + "' stearsa cu succes!"));
@@ -719,7 +609,6 @@ namespace Server {
                             }
                         }
 
-                        //removeKVFromTableFile(currentDatabase, sqlQuery.DELETE_TABLE_NAME, string.Join(String.Empty, kvIndexConcat));
                         mongoDBService.remove(currentDatabase, sqlQuery.DELETE_TABLE_NAME, string.Join(String.Empty, kvIndexConcat));
                         break;
 
