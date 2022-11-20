@@ -372,9 +372,9 @@ namespace Server {
             return null;
         }
 
-        public static void insertDataIntoIdxFiles(string dbName, string fileName, List<KeyValuePair<string, string>> keys, string prymaryKey, string tableName) {
+        public static void insertDataIntoIdxCollection(string dbName, string collectionName, List<KeyValuePair<string, string>> keys, string prymaryKey, string tableName) {
             foreach (KeyValuePair<string, string> key in keys) {
-                List<Record> records = mongoDBService.getAll(dbName, fileName + "_" + key.Key);
+                List<Record> records = mongoDBService.getAll(dbName, collectionName + "_" + key.Key);
                 if (records.Count() > 0) {
                     int counter = 0;
                     foreach (Record record in records) {
@@ -384,21 +384,19 @@ namespace Server {
                     }
                     if (counter < 1) {
                         mongoDBService.insert(
-                        dbName,
-                        fileName + "_" + key.Key,
-                        new Record(key.Value, prymaryKey)
+                            dbName,
+                            collectionName + "_" + key.Key,
+                            new Record(key.Value, prymaryKey)
                         );
-                    }
-                    else {
+                    } else {
                         send(new Message(MessageAction.ERROR, "Exista inregistrarea cu cheia unica " + key.Key + " in tabela '" + tableName + "'!"));
                         break;
                     }
-                }
-                else {
+                } else {
                     mongoDBService.insert(
-                    dbName,
-                    fileName + "_" + key.Key,
-                    new Record(key.Value, prymaryKey)
+                        dbName,
+                        collectionName + "_" + key.Key,
+                        new Record(key.Value, prymaryKey)
                     );
                 }
             }
@@ -609,7 +607,7 @@ namespace Server {
                             if (createIndexIDXs.Count() > 0) {
                                 List<string> createIndexAttributes = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/Structure", "name");
                                 createIndexAttributes.RemoveAll(name => createIndexPKs.Contains(name));
-                                
+
                                 foreach (Record record in records) {
                                     string indexAttributeValue = "";
                                     foreach (string indexAttribute in createIndexIDXs) {
@@ -737,9 +735,9 @@ namespace Server {
                                 }
                                 if (primaryCounter < 1) {
                                     mongoDBService.insert(
-                                    currentDatabase,
-                                    sqlQuery.INSERT_TABLE_NAME,
-                                    new Record(finalprimaryKey, string.Join("#", values))
+                                        currentDatabase,
+                                        sqlQuery.INSERT_TABLE_NAME,
+                                        new Record(finalprimaryKey, string.Join("#", values))
                                     );
                                 }
                                 else {
@@ -748,18 +746,29 @@ namespace Server {
                                 }
                             } else {
                                 mongoDBService.insert(
-                                currentDatabase,
-                                sqlQuery.INSERT_TABLE_NAME,
-                                new Record(finalprimaryKey, string.Join("#", values))
+                                    currentDatabase,
+                                    sqlQuery.INSERT_TABLE_NAME,
+                                    new Record(finalprimaryKey, string.Join("#", values))
                                 );
                             }
 
-                            string fileName = "idx_" + sqlQuery.INSERT_TABLE_NAME;
-                            // For Unique collectiones 
-                            insertDataIntoIdxFiles(currentDatabase, fileName, uniqueKeys, finalprimaryKey, sqlQuery.INSERT_TABLE_NAME);
-                            // For Index collectiones
-                            insertDataIntoIdxFiles(currentDatabase, "idx", indexKeys, finalprimaryKey, sqlQuery.INSERT_TABLE_NAME);
+                            // For Unique collections 
+                            insertDataIntoIdxCollection(
+                                currentDatabase,
+                                "idx_" + sqlQuery.INSERT_TABLE_NAME,
+                                uniqueKeys, 
+                                finalprimaryKey,
+                                sqlQuery.INSERT_TABLE_NAME
+                            );
 
+                            // For Index collections
+                            insertDataIntoIdxCollection(
+                                currentDatabase,
+                                "idx",
+                                indexKeys,
+                                finalprimaryKey,
+                                sqlQuery.INSERT_TABLE_NAME
+                            );
                         }
 
                         // !! TODO: Check for attribute if UNIQUE and don't allow INSERT with same value.
