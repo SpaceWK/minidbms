@@ -372,33 +372,31 @@ namespace Server {
             return null;
         }
 
-        public static void insertDataIntoIdxCollection(string dbName, string collectionName, List<KeyValuePair<string, string>> keys, string prymaryKey, string tableName) {
-            foreach (KeyValuePair<string, string> key in keys) {
-                List<Record> records = mongoDBService.getAll(dbName, collectionName + "_" + key.Key);
-                if (records.Count() > 0) {
-                    int counter = 0;
-                    foreach (Record record in records) {
-                        if (key.Value == record.key) {
-                            counter++;
-                        }
+        public static void insertDataIntoIdxCollection(string collection, string key, string value) {
+            List<Record> records = mongoDBService.getAll(currentDatabase, collection);
+            if (records.Count() > 0) {
+                int counter = 0;
+                foreach (Record record in records) {
+                    if (key == record.key) {
+                        counter++;
                     }
-                    if (counter < 1) {
-                        mongoDBService.insert(
-                            dbName,
-                            collectionName + "_" + key.Key,
-                            new Record(key.Value, prymaryKey)
-                        );
-                    } else {
-                        send(new Message(MessageAction.ERROR, "Exista inregistrarea cu cheia unica " + key.Key + " in tabela '" + tableName + "'!"));
-                        break;
-                    }
-                } else {
-                    mongoDBService.insert(
-                        dbName,
-                        collectionName + "_" + key.Key,
-                        new Record(key.Value, prymaryKey)
-                    );
                 }
+                if (counter < 1) {
+                    mongoDBService.insert(
+                        currentDatabase,
+                        collection,
+                        new Record(key, value)
+                    );
+                } else {
+                    send(new Message(MessageAction.ERROR, "Exista inregistrarea cu cheia " + key + " in tabela '" + collection + "'!"));
+                    return;
+                }
+            } else {
+                mongoDBService.insert(
+                    currentDatabase,
+                    collection,
+                    new Record(key, value)
+                );
             }
         }
 
@@ -701,17 +699,17 @@ namespace Server {
 
                         List<KeyValuePair<string,string>> uniqueKeys = new List<KeyValuePair<string, string>>();
                         List<KeyValuePair<string, string>> indexKeys = new List<KeyValuePair<string, string>>();
+                        List<KeyValuePair<string, string>> foreignKeys = new List<KeyValuePair<string, string>>();
+
                         string finalprimaryKey = "";
                         List<string> values = new List<string>();
 
                         List<string> insertPKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/PrimaryKeys");
-                        List<string> insertFKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/ForeignKeys");
                         List<string> insertUQs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/UniqueKeys");
                         List<string> insertIndexes = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/IndexFiles");
+                        List<string> insertFKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/ForeignKeys/ForeignKey/References");
 
-                        // string indexKeys = getXmlNodeValue(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.inse + "']/IndexAttributes");
-
-                        if (insertUQs.Count() > 0 || insertPKs.Count() > 0 || insertIndexes.Count() > 0) {
+                        if (insertUQs.Count() > 0 || insertPKs.Count() > 0 || insertIndexes.Count() > 0 || insertFKs.Count() > 0) {
                             foreach (KeyValuePair<string, string> attribute in sqlQuery.INSERT_TABLE_ATTRIBUTES_VALUES) {
                                 if (insertPKs.Contains(attribute.Key)) {
                                     finalprimaryKey = string.Concat(finalprimaryKey, attribute.Value);
@@ -724,51 +722,29 @@ namespace Server {
                                     values.Add(attribute.Value);
                                 }
                             }
-                            
-                            List<Record> primaryRecords = mongoDBService.getAll(currentDatabase, sqlQuery.INSERT_TABLE_NAME);
-                            if (primaryRecords.Count() > 0) {
-                                int primaryCounter = 0;
-                                foreach (Record record in primaryRecords) {
-                                    if (record.key == finalprimaryKey) {
-                                        primaryCounter++;
-                                    }
-                                }
-                                if (primaryCounter < 1) {
-                                    mongoDBService.insert(
-                                        currentDatabase,
-                                        sqlQuery.INSERT_TABLE_NAME,
-                                        new Record(finalprimaryKey, string.Join("#", values))
-                                    );
-                                }
-                                else {
-                                    send(new Message(MessageAction.ERROR, "Exista inregistrarea cu aceasta cheie primara in tabela '" + sqlQuery.INSERT_TABLE_NAME + "'!"));
-                                    break;
-                                }
-                            } else {
-                                mongoDBService.insert(
-                                    currentDatabase,
-                                    sqlQuery.INSERT_TABLE_NAME,
-                                    new Record(finalprimaryKey, string.Join("#", values))
+
+                            string finalValues = string.Join("#", values);
+                            insertDataIntoIdxCollection(
+                                sqlQuery.INSERT_TABLE_NAME,
+                                finalprimaryKey,
+                                finalValues
+                                );
+
+                            foreach (KeyValuePair<string, string> key in uniqueKeys) {
+                                insertDataIntoIdxCollection(
+                                    "idx_" + sqlQuery.INSERT_TABLE_NAME + "_" + key.Key,
+                                    key.Value,
+                                    finalprimaryKey
                                 );
                             }
 
-                            // For Unique collections 
-                            insertDataIntoIdxCollection(
-                                currentDatabase,
-                                "idx_" + sqlQuery.INSERT_TABLE_NAME,
-                                uniqueKeys, 
-                                finalprimaryKey,
-                                sqlQuery.INSERT_TABLE_NAME
-                            );
-
-                            // For Index collections
-                            insertDataIntoIdxCollection(
-                                currentDatabase,
-                                "idx",
-                                indexKeys,
-                                finalprimaryKey,
-                                sqlQuery.INSERT_TABLE_NAME
-                            );
+                            foreach (KeyValuePair<string, string> key in indexKeys) {
+                                insertDataIntoIdxCollection(
+                                    "idx_" + key.Key,
+                                    key.Value,
+                                    finalprimaryKey
+                                );
+                            }
                         }
 
                         // !! TODO: Check for attribute if UNIQUE and don't allow INSERT with same value.
