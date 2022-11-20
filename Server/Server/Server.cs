@@ -6,9 +6,11 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.SqlTypes;
 using System.Diagnostics.Metrics;
 using System.IO;
+using System.IO.Enumeration;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Reflection.Metadata.Ecma335;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -17,6 +19,7 @@ using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 using System.Xml.Serialization;
+using static MongoDB.Driver.WriteConcern;
 
 namespace Server {
     public class Program {
@@ -369,6 +372,38 @@ namespace Server {
             return null;
         }
 
+        public static void insertDataIntoIdxFiles(string dbName, string fileName, List<KeyValuePair<string, string>> keys, string prymaryKey, string tableName) {
+            foreach (KeyValuePair<string, string> key in keys) {
+                List<Record> records = mongoDBService.getAll(dbName, fileName + "_" + key.Key);
+                if (records.Count() > 0) {
+                    int counter = 0;
+                    foreach (Record record in records) {
+                        if (key.Value == record.key) {
+                            counter++;
+                        }
+                    }
+                    if (counter < 1) {
+                        mongoDBService.insert(
+                        dbName,
+                        fileName + "_" + key.Key,
+                        new Record(key.Value, prymaryKey)
+                        );
+                    }
+                    else {
+                        send(new Message(MessageAction.ERROR, "Exista inregistrarea cu cheia unica " + key.Key + " in tabela '" + tableName + "'!"));
+                        break;
+                    }
+                }
+                else {
+                    mongoDBService.insert(
+                    dbName,
+                    fileName + "_" + key.Key,
+                    new Record(key.Value, prymaryKey)
+                    );
+                }
+            }
+        }
+
         public static void executeQuery(SQLQuery sqlQuery) {
             catalog.Load("../../../Catalog.xml");
 
@@ -574,7 +609,7 @@ namespace Server {
                             if (createIndexIDXs.Count() > 0) {
                                 List<string> createIndexAttributes = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/Structure", "name");
                                 createIndexAttributes.RemoveAll(name => createIndexPKs.Contains(name));
-
+                                
                                 foreach (Record record in records) {
                                     string indexAttributeValue = "";
                                     foreach (string indexAttribute in createIndexIDXs) {
@@ -667,35 +702,36 @@ namespace Server {
                         }
 
                         List<KeyValuePair<string,string>> uniqueKeys = new List<KeyValuePair<string, string>>();
-                        List<string> primaryKeyConcat = new List<string>();
+                        List<KeyValuePair<string, string>> indexKeys = new List<KeyValuePair<string, string>>();
+                        string finalprimaryKey = "";
                         List<string> values = new List<string>();
+
                         List<string> insertPKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/PrimaryKeys");
                         List<string> insertFKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/ForeignKeys");
                         List<string> insertUQs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/UniqueKeys");
                         List<string> insertIndexes = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/IndexFiles");
 
                         // string indexKeys = getXmlNodeValue(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.inse + "']/IndexAttributes");
-                        
-                        if (insertUQs.Count() > 0 || insertPKs.Count() > 0) {
+
+                        if (insertUQs.Count() > 0 || insertPKs.Count() > 0 || insertIndexes.Count() > 0) {
                             foreach (KeyValuePair<string, string> attribute in sqlQuery.INSERT_TABLE_ATTRIBUTES_VALUES) {
                                 if (insertPKs.Contains(attribute.Key)) {
-                                    primaryKeyConcat.Add(attribute.Value);
-                                }
-                                else if (insertUQs.Contains(attribute.Key)) {
+                                    finalprimaryKey = string.Concat(finalprimaryKey, attribute.Value);
+                                } else if (insertUQs.Contains(attribute.Key)) {
                                     uniqueKeys.Add(attribute);
+                                } else if (insertIndexes.Contains(attribute.Key)) {
+                                    indexKeys.Add(attribute);
                                 }
-                                if (!primaryKeyConcat.Contains(attribute.Value)) {
+                                if (!finalprimaryKey.Contains(attribute.Value)) {
                                     values.Add(attribute.Value);
                                 }
                             }
-
+                            
                             List<Record> primaryRecords = mongoDBService.getAll(currentDatabase, sqlQuery.INSERT_TABLE_NAME);
                             if (primaryRecords.Count() > 0) {
-
-                                string finalKeyConcat = string.Join(String.Empty, primaryKeyConcat);
                                 int primaryCounter = 0;
                                 foreach (Record record in primaryRecords) {
-                                    if (record.key == finalKeyConcat) {
+                                    if (record.key == finalprimaryKey) {
                                         primaryCounter++;
                                     }
                                 }
@@ -703,66 +739,28 @@ namespace Server {
                                     mongoDBService.insert(
                                     currentDatabase,
                                     sqlQuery.INSERT_TABLE_NAME,
-                                    new Record(
-                                        string.Join(String.Empty, primaryKeyConcat),
-                                        string.Join("#", values)
-                                        )
+                                    new Record(finalprimaryKey, string.Join("#", values))
                                     );
-                                } else {
+                                }
+                                else {
                                     send(new Message(MessageAction.ERROR, "Exista inregistrarea cu aceasta cheie primara in tabela '" + sqlQuery.INSERT_TABLE_NAME + "'!"));
                                     break;
                                 }
-
                             } else {
                                 mongoDBService.insert(
-                                    currentDatabase,
-                                    sqlQuery.INSERT_TABLE_NAME,
-                                    new Record(
-                                        string.Join(String.Empty, primaryKeyConcat),
-                                        string.Join("#", values)
-                                    )
+                                currentDatabase,
+                                sqlQuery.INSERT_TABLE_NAME,
+                                new Record(finalprimaryKey, string.Join("#", values))
                                 );
                             }
 
-                            if (uniqueKeys.Count() > 0) {
-                                foreach (KeyValuePair<string, string> uniqueKey in uniqueKeys) {
-                                    List<Record> uniqueRecords = mongoDBService.getAll(currentDatabase, "idx_" + sqlQuery.INSERT_TABLE_NAME + "_" + uniqueKey.Key);
-                                    if (uniqueRecords.Count() > 0) {
-                                        int uniqueCounter = 0;
-                                        foreach (Record record in uniqueRecords) {
-                                            if(uniqueKey.Value == record.key) {
-                                                uniqueCounter++;
-                                            }
-                                        }
+                            string fileName = "idx_" + sqlQuery.INSERT_TABLE_NAME;
+                            // For Unique collectiones 
+                            insertDataIntoIdxFiles(currentDatabase, fileName, uniqueKeys, finalprimaryKey, sqlQuery.INSERT_TABLE_NAME);
+                            // For Index collectiones
+                            insertDataIntoIdxFiles(currentDatabase, "idx", indexKeys, finalprimaryKey, sqlQuery.INSERT_TABLE_NAME);
 
-                                        if (uniqueCounter < 1) {
-                                            mongoDBService.insert(
-                                            currentDatabase,
-                                            "idx_" + sqlQuery.INSERT_TABLE_NAME + "_" + uniqueKey.Key,
-                                            new Record(
-                                                string.Join(String.Empty, uniqueKey.Value),
-                                                string.Join("#", primaryKeyConcat)
-                                                )
-                                            );
-                                        } else {
-                                            send(new Message(MessageAction.ERROR, "Exista inregistrarea cu cheia unica " + uniqueKey.Key + " in tabela '" + sqlQuery.INSERT_TABLE_NAME + "'!"));
-                                            break;
-                                        }
-                                    } else {
-                                        mongoDBService.insert(
-                                        currentDatabase,
-                                        "idx_" + sqlQuery.INSERT_TABLE_NAME + "_" + uniqueKey.Key,
-                                        new Record(
-                                            string.Join(String.Empty, uniqueKey.Value),
-                                            string.Join("#", primaryKeyConcat)
-                                             )
-                                        );
-                                    }
-                                }
-                            }     
                         }
-
-                        //appendKVInTableFile(currentDatabase, sqlQuery.INSERT_TABLE_NAME, string.Join(String.Empty, keyConcat), values);
 
                         // !! TODO: Check for attribute if UNIQUE and don't allow INSERT with same value.
 
