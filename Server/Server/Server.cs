@@ -637,7 +637,7 @@ namespace Server {
 
                             foreach (KeyValuePair<string, string> key in insertIndexKeys) {
                                 insertDataIntoIdxCollection(
-                                    "idx_" + key.Key, // Reminder when the collection name is changed
+                                    "idx_" + sqlQuery.INSERT_TABLE_NAME + "_" + key.Key,
                                     key.Value,
                                     insertPrimaryKey
                                 );
@@ -664,10 +664,6 @@ namespace Server {
                                 }
                             }
                         }
-
-                        // !! TODO: Check for attribute if UNIQUE and don't allow INSERT with same value.
-
-                        // !! TODO: Get table indexes from XML and insert data into that index collections too.
 
                         send(new Message(MessageAction.SUCCESS, "Datele inserate cu succes in tabela '" + sqlQuery.INSERT_TABLE_NAME + "'!"));
                         break;
