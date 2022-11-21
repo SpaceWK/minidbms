@@ -49,7 +49,9 @@ namespace Client {
                 Console.ResetColor();
 
                 Console.WriteLine();
-                Console.WriteLine("------------------------------------------------------------");
+                for (int i = 0; i < Console.WindowWidth; i++) {
+                    Console.Write("-");
+                }
                 Console.WriteLine();
             }
             Console.ForegroundColor = ConsoleColor.DarkCyan;
@@ -132,6 +134,10 @@ namespace Client {
             Console.WriteLine("Baza de date: {0}", currentDatabase);
             Console.ResetColor();
 
+            Console.WriteLine();
+            for (int i = 0; i < Console.WindowWidth; i++) {
+                Console.Write("-");
+            }
             Console.WriteLine();
             if (tableData.Count() > 0) {
                 foreach (KeyValuePair<string, List<string>> item in tableData) {

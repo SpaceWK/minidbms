@@ -400,7 +400,7 @@ namespace Server {
 
                                 // TODO: Can be more foreign attributes and referenced table attributes.
 
-                                mongoDBService.createCollection(currentDatabase, "idx_" + attribute.foreignKeyTableReferenceName + "_" + attribute.name);
+                                mongoDBService.createCollection(currentDatabase, "idx_" + sqlQuery.CREATE_TABLE_NAME + "_" + attribute.name);
                             }
                             if (attribute.isUnique) {
                                 appendXmlNodeTo(
@@ -480,7 +480,7 @@ namespace Server {
                                         currentDatabase,
                                         sqlQuery.CREATE_INDEX_NAME,
                                         new Record(indexAttributeValue, record.key)
-                                    );  
+                                    );
                                 }
                             }
                         }
@@ -514,12 +514,12 @@ namespace Server {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.DROP_TABLE_NAME + "' nu exista."));
                             return;
                         }
-                        List<string> allTableNames = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables", "tableName");
-                        allTableNames.Remove(sqlQuery.DROP_TABLE_NAME);
-                        if (allTableNames.Count() > 0) {
-                            foreach (string tableName in allTableNames) {
-                                List<string> referenceTableNames = getXmlTableForeignKeys(tableName).Select(fk => fk.referencedTableName).ToList();
-                                if (referenceTableNames.Count() > 0 && referenceTableNames.Contains(sqlQuery.DROP_TABLE_NAME)) {
+                        List<string> dropTableAllTableNames = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables", "tableName");
+                        dropTableAllTableNames.Remove(sqlQuery.DROP_TABLE_NAME);
+                        if (dropTableAllTableNames.Count() > 0) {
+                            foreach (string tableName in dropTableAllTableNames) {
+                                List<string> dropTableReferenceTableNames = getXmlTableForeignKeys(tableName).Select(fk => fk.referencedTableName).ToList();
+                                if (dropTableReferenceTableNames.Count() > 0 && dropTableReferenceTableNames.Contains(sqlQuery.DROP_TABLE_NAME)) {
                                     send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.DROP_TABLE_NAME + "' nu poate fi eliminata, deoarece este referentiata de o cheie straina."));
                                     return;
                                 }
@@ -596,20 +596,62 @@ namespace Server {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.DELETE_TABLE_NAME + "' nu exista."));
                             return;
                         }
-
-                        // !! TODO: Check table foreign key before delete.
-                        // !! TODO: Delete from both the table and the index collections.
-
-                        List<string> kvIndexConcat = new List<string>();
-                        List<string> deletePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/PrimaryKeys");
-                        
-                        foreach (WhereCondition condition in sqlQuery.DELETE_TABLE_CONDITIONS) {
-                            if (deletePKs.Contains(condition.name)) {
-                                kvIndexConcat.Add(condition.value);
+                        if (sqlQuery.DELETE_TABLE_CONDITIONS != null) {
+                            List<string> deleteAllTableNames = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables", "tableName");
+                            deleteAllTableNames.Remove(sqlQuery.DELETE_TABLE_NAME);
+                            if (deleteAllTableNames.Count() > 0) {
+                                foreach (string tableName in deleteAllTableNames) {
+                                    List<string> deleteReferenceTableKeys = getXmlTableForeignKeys(tableName).Select(fk => fk.referencedTableKey).ToList();
+                                    if (deleteReferenceTableKeys.Count() > 0) {
+                                        foreach (WhereCondition condition in sqlQuery.DELETE_TABLE_CONDITIONS) {
+                                            if (deleteReferenceTableKeys.Contains(condition.name)) {
+                                                send(new Message(MessageAction.ERROR, "Inregistrarea nu poate fi eliminata, deoarece cheia '" + condition.name + "' este referinta in tabela '" + tableName + "'."));
+                                                return;
+                                            }
+                                        }
+                                    }
+                                }
                             }
+
+                            string deletePrimaryKey = "";
+                            List<string> deletePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/PrimaryKeys");
+                            foreach (WhereCondition condition in sqlQuery.DELETE_TABLE_CONDITIONS) {
+                                if (deletePKs.Contains(condition.name)) {
+                                    deletePrimaryKey = string.Concat(deletePrimaryKey, condition.value);
+                                }
+                            }
+                            mongoDBService.removeByKey(
+                                currentDatabase,
+                                sqlQuery.DELETE_TABLE_NAME,
+                                deletePrimaryKey
+                            );
+
+                            string conditionsTableName;
+                            foreach (WhereCondition condition in sqlQuery.DELETE_TABLE_CONDITIONS) {
+                                conditionsTableName = "idx_" + sqlQuery.DELETE_TABLE_NAME + condition.name;
+                                if (mongoDBService.existsCollection(currentDatabase, conditionsTableName)) {
+                                    mongoDBService.removeAllByValue(
+                                        currentDatabase,
+                                        conditionsTableName,
+                                        condition.value
+                                    );
+                                }
+                            }
+                        } else {
+                            List<string> deleteNoCondUKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/UniqueKeys");
+                            foreach (string uniqueKey in deleteNoCondUKs) {
+                                mongoDBService.clearCollection(currentDatabase, "idx_" + sqlQuery.DELETE_TABLE_NAME + uniqueKey);
+                            }
+
+                            List<string> deleteNoCondIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/IndexFiles");
+                            foreach (string indexAttribute in deleteNoCondIDXs) {
+                                mongoDBService.clearCollection(currentDatabase, "idx_" + sqlQuery.DELETE_TABLE_NAME + indexAttribute);
+                            }
+
+                            mongoDBService.clearCollection(currentDatabase, sqlQuery.DELETE_TABLE_NAME);
                         }
 
-                        mongoDBService.remove(currentDatabase, sqlQuery.DELETE_TABLE_NAME, string.Join(String.Empty, kvIndexConcat));
+                        send(new Message(MessageAction.SUCCESS, "Datele eliminate cu succes din tabela '" + sqlQuery.DELETE_TABLE_NAME + "'!"));
                         break;
 
                     default:
@@ -798,44 +840,50 @@ namespace Server {
                     break;
 
                 case "delete":
-                    if (args[1].Contains("FROM", StringComparison.OrdinalIgnoreCase) && args[3].Contains("WHERE", StringComparison.OrdinalIgnoreCase)) {
-                        pattern = @"(?<=WHERE ).*";
-                        matches = Regex.Matches(statement, pattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
-                        if (matches.Count > 0) {
-                            List<WhereCondition> whereConditions = new List<WhereCondition>();
-                            string[] conditions = Regex.Split(matches[0], " AND ", RegexOptions.IgnoreCase);
-                            foreach (string condition in conditions) {
-                                string[] conditionArgs = condition.Split(" "); // Watch out for the conditions to be split by " ".
-                                switch (conditionArgs[1]) {
-                                    case "=":
-                                        whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.EQUAL, conditionArgs[2].Replace("\'", String.Empty)));
-                                        break;
-                                    case "!=":
-                                        whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.NOT_EQUAL, conditionArgs[2].Replace("\'", String.Empty)));
-                                        break;
-                                    case "<":
-                                        whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.LESS_THAN, conditionArgs[2].Replace("\'", String.Empty)));
-                                        break;
-                                    case "<=":
-                                        whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.LESS_OR_EQUAL_THAN, conditionArgs[2].Replace("\'", String.Empty)));
-                                        break;
-                                    case ">":
-                                        whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_THAN, conditionArgs[2].Replace("\'", String.Empty)));
-                                        break;
-                                    case ">=":
-                                        whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_OR_EQUAL_THAN, conditionArgs[2].Replace("\'", String.Empty)));
-                                        break;
-                                    default:
-                                        break;
+                    if (args[1].Contains("FROM", StringComparison.OrdinalIgnoreCase)) {
+                        if (args[3].Contains("WHERE", StringComparison.OrdinalIgnoreCase)) {
+                            pattern = @"(?<=WHERE ).*";
+                            matches = Regex.Matches(statement, pattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
+                            if (matches.Count > 0) {
+                                List<WhereCondition> whereConditions = new List<WhereCondition>();
+                                string[] conditions = Regex.Split(matches[0], " AND ", RegexOptions.IgnoreCase);
+                                foreach (string condition in conditions) {
+                                    string[] conditionArgs = condition.Split(" "); // Watch out for the conditions to be split by " ".
+                                    switch (conditionArgs[1]) {
+                                        case "=":
+                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.EQUAL, conditionArgs[2].Replace("\'", String.Empty)));
+                                            break;
+                                        case "!=":
+                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.NOT_EQUAL, conditionArgs[2].Replace("\'", String.Empty)));
+                                            break;
+                                        case "<":
+                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.LESS_THAN, conditionArgs[2].Replace("\'", String.Empty)));
+                                            break;
+                                        case "<=":
+                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.LESS_OR_EQUAL_THAN, conditionArgs[2].Replace("\'", String.Empty)));
+                                            break;
+                                        case ">":
+                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_THAN, conditionArgs[2].Replace("\'", String.Empty)));
+                                            break;
+                                        case ">=":
+                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_OR_EQUAL_THAN, conditionArgs[2].Replace("\'", String.Empty)));
+                                            break;
+                                        default:
+                                            break;
+                                    }
                                 }
-                            }
 
+                                sqlQuery = new SQLQuery(SQLQueryType.DELETE);
+                                sqlQuery.DELETE_TABLE_NAME = args[2];
+                                sqlQuery.DELETE_TABLE_CONDITIONS = whereConditions;
+                            } else {
+                                sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                                sqlQuery.error = "SQL query invalid.";
+                            }
+                        } else {
                             sqlQuery = new SQLQuery(SQLQueryType.DELETE);
                             sqlQuery.DELETE_TABLE_NAME = args[2];
-                            sqlQuery.DELETE_TABLE_CONDITIONS = whereConditions;
-                        } else {
-                            sqlQuery = new SQLQuery(SQLQueryType.ERROR);
-                            sqlQuery.error = "SQL query invalid.";
+                            sqlQuery.DELETE_TABLE_CONDITIONS = null;
                         }
                     } else {
                         sqlQuery = new SQLQuery(SQLQueryType.ERROR);
