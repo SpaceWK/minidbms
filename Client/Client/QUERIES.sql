@@ -3,11 +3,11 @@ USE students;
 
 
 # Disciplines
-CREATE TABLE disciplines (DiscID VARCHAR(5) PRIMARY KEY, DName VARCHAR(20), CredirNr INT);
+CREATE TABLE disciplines (DiscID VARCHAR(5) PRIMARY KEY, DName VARCHAR(20), CreditNr INT);
 
-INSERT INTO disciplines (DiscID, DName, CredirNr) VALUES ('DB1', 'Databases 1', 7);
-INSERT INTO disciplines (DiscID, DName, CredirNr) VALUES ('DB', 'Data Structures', 6);
-INSERT INTO disciplines (DiscID, DName, CredirNr) VALUES ('CP', 'C Programming', 8);
+INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('DB1', 'Databases 1', 7);
+INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('DB', 'Data Structures', 6);
+INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('CP', 'C Programming', 8);
 
 
 # Specialization

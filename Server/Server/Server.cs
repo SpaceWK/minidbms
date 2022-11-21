@@ -213,6 +213,8 @@ namespace Server {
         }
 
         public static List<string> getXmlNodeChildrenValues(string nodeNamePath) {
+            catalog.Load("../../../Catalog.xml");
+
             List<string> values = new List<string>();
             XmlNode parent = catalog.SelectSingleNode(nodeNamePath);
             if (parent != null) {
@@ -226,6 +228,8 @@ namespace Server {
         }
 
         public static List<string> getXmlNodeChildrenAttributeValues(string nodeNamePath, string attributeName) {
+            catalog.Load("../../../Catalog.xml");
+
             List <string> values = new List<string>();
             XmlNode parent = catalog.SelectSingleNode(nodeNamePath);
             if (parent != null) {
