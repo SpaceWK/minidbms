@@ -6,9 +6,11 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.SqlTypes;
 using System.Diagnostics.Metrics;
 using System.IO;
+using System.IO.Enumeration;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Reflection.Metadata.Ecma335;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -17,6 +19,7 @@ using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 using System.Xml.Serialization;
+using static MongoDB.Driver.WriteConcern;
 
 namespace Server {
     public class Program {
@@ -268,6 +271,34 @@ namespace Server {
             }
 
             return null;
+        }
+
+        public static void insertDataIntoIdxCollection(string collection, string key, string value) {
+            List<Record> records = mongoDBService.getAll(currentDatabase, collection);
+            if (records.Count() > 0) {
+                int counter = 0;
+                foreach (Record record in records) {
+                    if (key == record.key) {
+                        counter++;
+                    }
+                }
+                if (counter < 1) {
+                    mongoDBService.insert(
+                        currentDatabase,
+                        collection,
+                        new Record(key, value)
+                    );
+                } else {
+                    send(new Message(MessageAction.ERROR, "Exista inregistrarea cu cheia " + key + " in tabela '" + collection + "'!"));
+                    return;
+                }
+            } else {
+                mongoDBService.insert(
+                    currentDatabase,
+                    collection,
+                    new Record(key, value)
+                );
+            }
         }
 
         public static void executeQuery(SQLQuery sqlQuery) {
@@ -556,29 +587,83 @@ namespace Server {
                             return;
                         }
 
-                        List<string> keyConcat = new List<string>();
-                        List<string> values = new List<string>();
-                        List<string> insertPKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/PrimaryKeys");
-                        // string indexKeys = getXmlNodeValue(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/IndexFiles/IndexFile[@indexFileName='" + sqlQuery.inse + "']/IndexAttributes");
+                        List<KeyValuePair<string,string>> insertUniqueKeys = new List<KeyValuePair<string, string>>();
+                        List<KeyValuePair<string, string>> insertIndexKeys = new List<KeyValuePair<string, string>>();
+                        List<KeyValuePair<string, string>> insertForeignKeys = new List<KeyValuePair<string, string>>();
 
-                        foreach (KeyValuePair<string, string> attribute in sqlQuery.INSERT_TABLE_ATTRIBUTES_VALUES) {
-                            if (insertPKs.Contains(attribute.Key)) {
-                                keyConcat.Add(attribute.Value);
+                        string insertPrimaryKey = "";
+                        List<string> insertValues = new List<string>();
+
+                        List<string> insertPKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/PrimaryKeys");
+                        List<string> insertUQs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/UniqueKeys");
+                        List<string> insertIndexes = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/IndexFiles");
+                        List<ForeignKey> insertFKs = getXmlTableForeignKeys(sqlQuery.INSERT_TABLE_NAME);
+                        
+                        if (insertUQs.Count() > 0 || insertPKs.Count() > 0 || insertIndexes.Count() > 0 || insertFKs.Count() > 0) {
+                            foreach (KeyValuePair<string, string> attribute in sqlQuery.INSERT_TABLE_ATTRIBUTES_VALUES) {
+                                if (insertPKs.Contains(attribute.Key)) {
+                                    insertPrimaryKey = string.Concat(insertPrimaryKey, attribute.Value);
+                                } else if (insertUQs.Contains(attribute.Key)) {
+                                    insertUniqueKeys.Add(attribute);
+                                } else if (insertIndexes.Contains(attribute.Key)) {
+                                    insertIndexKeys.Add(attribute);
+                                } else {
+                                    foreach (ForeignKey foreignKey in insertFKs) {
+                                        if (foreignKey.attribute == attribute.Key) {
+                                            insertForeignKeys.Add(attribute);
+                                        }
+                                    }
+                                }
+
+                                if (!insertPrimaryKey.Contains(attribute.Value)) {
+                                    insertValues.Add(attribute.Value);
+                                }
                             }
-                            if (!keyConcat.Contains(attribute.Value)) {
-                                values.Add(attribute.Value);
+
+                            string insertFinalValues = string.Join("#", insertValues);
+                            insertDataIntoIdxCollection(
+                                sqlQuery.INSERT_TABLE_NAME,
+                                insertPrimaryKey,
+                                insertFinalValues
+                            );
+
+                            foreach (KeyValuePair<string, string> key in insertUniqueKeys) {
+                                insertDataIntoIdxCollection(
+                                    "idx_" + sqlQuery.INSERT_TABLE_NAME + "_" + key.Key,
+                                    key.Value,
+                                    insertPrimaryKey
+                                );
+                            }
+
+                            foreach (KeyValuePair<string, string> key in insertIndexKeys) {
+                                insertDataIntoIdxCollection(
+                                    "idx_" + key.Key, // Reminder when the collection name is changed
+                                    key.Value,
+                                    insertPrimaryKey
+                                );
+                            }
+
+                            foreach (ForeignKey foreignKey in insertFKs) {
+                                List<Record> referenceCollectionRecords = mongoDBService.getAll(currentDatabase, foreignKey.referencedTableName);
+                                if (referenceCollectionRecords.Count() > 0) {
+                                    foreach (Record referenceCollectionRecord in referenceCollectionRecords) {
+                                        foreach(KeyValuePair<string, string> key in insertForeignKeys) {
+                                            if (foreignKey.referencedTableKey == key.Key && referenceCollectionRecord.key == key.Value) {
+                                                insertDataIntoIdxCollection(
+                                                    "idx_" + sqlQuery.INSERT_TABLE_NAME + "_" + key.Key,
+                                                    key.Value,
+                                                    insertPrimaryKey
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                                else {
+                                    send(new Message(MessageAction.ERROR, "Nu exista inregistrarea in '" + foreignKey.referencedTableKey + "'!"));
+                                    break;
+                                }
                             }
                         }
-
-                        //appendKVInTableFile(currentDatabase, sqlQuery.INSERT_TABLE_NAME, string.Join(String.Empty, keyConcat), values);
-                        mongoDBService.insert(
-                            currentDatabase,
-                            sqlQuery.INSERT_TABLE_NAME,
-                            new Record(
-                                string.Join(String.Empty, keyConcat),
-                                string.Join("#", values)
-                            )
-                        );
 
                         // !! TODO: Check for attribute if UNIQUE and don't allow INSERT with same value.
 
