@@ -25,9 +25,9 @@ INSERT INTO groups (GroupID, SpecID) VALUES (531, 'I');
 # Students
 CREATE TABLE students (StudID INT PRIMARY KEY, GroupID INT REFERENCES groups (GroupID));
 
-INSERT INTO students (StudID, GroupId, StudName, Email) VALUES (1, 531, 'John Foreman', 'JohnForeman@email.com');
-INSERT INTO students (StudID, GroupId, StudName, Email) VALUES (2, 531, 'Ashley Cole', 'AshleyCole@email.com');
-INSERT INTO students (StudID, GroupId, StudName, Email) VALUES (8, 532, 'Nicolas Pitt', 'NicolasPitt@email.com');
+INSERT INTO students (StudID, GroupID, StudName, Email) VALUES (1, 531, 'John Foreman', 'JohnForeman@email.com');
+INSERT INTO students (StudID, GroupID, StudName, Email) VALUES (2, 531, 'Ashley Cole', 'AshleyCole@email.com');
+INSERT INTO students (StudID, GroupID, StudName, Email) VALUES (8, 532, 'Nicolas Pitt', 'NicolasPitt@email.com');
 
 
 # Marks
