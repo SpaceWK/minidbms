@@ -531,7 +531,7 @@ namespace Server {
 
                                 // TODO: Can be more foreign attributes and referenced table attributes.
 
-                                mongoDBService.createCollection(currentDatabase, "idx_" + attribute.foreignKeyTableReferenceName + "_" + attribute.name);
+                                mongoDBService.createCollection(currentDatabase, "idx_" + sqlQuery.CREATE_TABLE_NAME + "_" + attribute.name);
                             }
                             if (attribute.isUnique) {
                                 appendXmlNodeTo(
@@ -697,53 +697,81 @@ namespace Server {
                             return;
                         }
 
-                        List<KeyValuePair<string,string>> uniqueKeys = new List<KeyValuePair<string, string>>();
-                        List<KeyValuePair<string, string>> indexKeys = new List<KeyValuePair<string, string>>();
-                        List<KeyValuePair<string, string>> foreignKeys = new List<KeyValuePair<string, string>>();
+                        List<KeyValuePair<string,string>> insertUniqueKeys = new List<KeyValuePair<string, string>>();
+                        List<KeyValuePair<string, string>> insertIndexKeys = new List<KeyValuePair<string, string>>();
+                        List<KeyValuePair<string, string>> insertForeignKeys = new List<KeyValuePair<string, string>>();
 
-                        string finalprimaryKey = "";
-                        List<string> values = new List<string>();
+                        string insertPrimaryKey = "";
+                        List<string> insertValues = new List<string>();
 
                         List<string> insertPKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/PrimaryKeys");
                         List<string> insertUQs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/UniqueKeys");
                         List<string> insertIndexes = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/IndexFiles");
-                        List<string> insertFKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/ForeignKeys/ForeignKey/References");
-
+                        List<ForeignKey> insertFKs = getXmlTableForeignKeys(sqlQuery.INSERT_TABLE_NAME);
+                        
                         if (insertUQs.Count() > 0 || insertPKs.Count() > 0 || insertIndexes.Count() > 0 || insertFKs.Count() > 0) {
                             foreach (KeyValuePair<string, string> attribute in sqlQuery.INSERT_TABLE_ATTRIBUTES_VALUES) {
                                 if (insertPKs.Contains(attribute.Key)) {
-                                    finalprimaryKey = string.Concat(finalprimaryKey, attribute.Value);
+                                    insertPrimaryKey = string.Concat(insertPrimaryKey, attribute.Value);
                                 } else if (insertUQs.Contains(attribute.Key)) {
-                                    uniqueKeys.Add(attribute);
+                                    insertUniqueKeys.Add(attribute);
                                 } else if (insertIndexes.Contains(attribute.Key)) {
-                                    indexKeys.Add(attribute);
+                                    insertIndexKeys.Add(attribute);
+                                } else {
+                                    foreach (ForeignKey foreignKey in insertFKs) {
+                                        if (foreignKey.attribute == attribute.Key) {
+                                            insertForeignKeys.Add(attribute);
+                                        }
+                                    }
                                 }
-                                if (!finalprimaryKey.Contains(attribute.Value)) {
-                                    values.Add(attribute.Value);
+
+                                if (!insertPrimaryKey.Contains(attribute.Value)) {
+                                    insertValues.Add(attribute.Value);
                                 }
                             }
 
-                            string finalValues = string.Join("#", values);
+                            string insertFinalValues = string.Join("#", insertValues);
                             insertDataIntoIdxCollection(
                                 sqlQuery.INSERT_TABLE_NAME,
-                                finalprimaryKey,
-                                finalValues
-                                );
+                                insertPrimaryKey,
+                                insertFinalValues
+                            );
 
-                            foreach (KeyValuePair<string, string> key in uniqueKeys) {
+                            foreach (KeyValuePair<string, string> key in insertUniqueKeys) {
                                 insertDataIntoIdxCollection(
                                     "idx_" + sqlQuery.INSERT_TABLE_NAME + "_" + key.Key,
                                     key.Value,
-                                    finalprimaryKey
+                                    insertPrimaryKey
                                 );
                             }
 
-                            foreach (KeyValuePair<string, string> key in indexKeys) {
+                            foreach (KeyValuePair<string, string> key in insertIndexKeys) {
                                 insertDataIntoIdxCollection(
-                                    "idx_" + key.Key,
+                                    "idx_" + key.Key, // Reminder when the collection name is changed
                                     key.Value,
-                                    finalprimaryKey
+                                    insertPrimaryKey
                                 );
+                            }
+
+                            foreach (ForeignKey foreignKey in insertFKs) {
+                                List<Record> referenceCollectionRecords = mongoDBService.getAll(currentDatabase, foreignKey.referencedTableName);
+                                if (referenceCollectionRecords.Count() > 0) {
+                                    foreach (Record referenceCollectionRecord in referenceCollectionRecords) {
+                                        foreach(KeyValuePair<string, string> key in insertForeignKeys) {
+                                            if (foreignKey.referencedTableKey == key.Key && referenceCollectionRecord.key == key.Value) {
+                                                insertDataIntoIdxCollection(
+                                                    "idx_" + sqlQuery.INSERT_TABLE_NAME + "_" + key.Key,
+                                                    key.Value,
+                                                    insertPrimaryKey
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                                else {
+                                    send(new Message(MessageAction.ERROR, "Nu exista inregistrarea in '" + foreignKey.referencedTableKey + "'!"));
+                                    break;
+                                }
                             }
                         }
 
