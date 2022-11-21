@@ -718,26 +718,40 @@ namespace Server {
                                 deletePrimaryKey
                             );
 
-                            string conditionsTableName;
-                            foreach (WhereCondition condition in sqlQuery.DELETE_TABLE_CONDITIONS) {
-                                conditionsTableName = "idx_" + sqlQuery.DELETE_TABLE_NAME + condition.name;
-                                if (mongoDBService.existsCollection(currentDatabase, conditionsTableName)) {
-                                    mongoDBService.removeAllByValue(
-                                        currentDatabase,
-                                        conditionsTableName,
-                                        condition.value
-                                    );
+                            string indexTableName;
+                            List<string> deleteIDXCollectionUKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/UniqueKeys");
+                            List<string> deleteIDXCollectionIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/IndexFiles");
+                            List<string> merged = new List<string>();
+                            merged.AddRange(deleteIDXCollectionUKs);
+                            merged.AddRange(deleteIDXCollectionIDXs);
+                            foreach (string key in merged) {
+                                indexTableName = "idx_" + sqlQuery.DELETE_TABLE_NAME + "_" + key;
+                                if (mongoDBService.existsCollection(currentDatabase, indexTableName)) {
+                                    foreach (WhereCondition condition in sqlQuery.DELETE_TABLE_CONDITIONS) {
+                                        mongoDBService.removeAllByValue(
+                                            currentDatabase,
+                                            indexTableName,
+                                            condition.value
+                                        );
+                                    }
                                 }
                             }
                         } else {
+                            string indexTableName;
                             List<string> deleteNoCondUKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/UniqueKeys");
                             foreach (string uniqueKey in deleteNoCondUKs) {
-                                mongoDBService.clearCollection(currentDatabase, "idx_" + sqlQuery.DELETE_TABLE_NAME + uniqueKey);
-                            }
+                                indexTableName = "idx_" + sqlQuery.DELETE_TABLE_NAME + "_" + uniqueKey;
+                                if (mongoDBService.existsCollection(currentDatabase, indexTableName)) {
+                                    mongoDBService.clearCollection(currentDatabase, indexTableName);
+                                    }
+                                }
 
                             List<string> deleteNoCondIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/IndexFiles");
                             foreach (string indexAttribute in deleteNoCondIDXs) {
-                                mongoDBService.clearCollection(currentDatabase, "idx_" + sqlQuery.DELETE_TABLE_NAME + indexAttribute);
+                                indexTableName = "idx_" + sqlQuery.DELETE_TABLE_NAME + "_" + indexAttribute;
+                                if (mongoDBService.existsCollection(currentDatabase, indexTableName)) {
+                                    mongoDBService.clearCollection(currentDatabase, indexTableName);
+                                }
                             }
 
                             mongoDBService.clearCollection(currentDatabase, sqlQuery.DELETE_TABLE_NAME);
@@ -933,7 +947,7 @@ namespace Server {
 
                 case "delete":
                     if (args[1].Contains("FROM", StringComparison.OrdinalIgnoreCase)) {
-                        if (args[3].Contains("WHERE", StringComparison.OrdinalIgnoreCase)) {
+                        if (args.Length > 3 && args[3].Contains("WHERE", StringComparison.OrdinalIgnoreCase)) {
                             pattern = @"(?<=WHERE ).*";
                             matches = Regex.Matches(statement, pattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
                             if (matches.Count > 0) {
