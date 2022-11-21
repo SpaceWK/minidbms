@@ -39,6 +39,18 @@ namespace Server {
             return false;
         }
 
+        public bool existsCollection(string dbName, string tableName) {
+            IMongoDatabase mongoDB = this.mongoClient.GetDatabase(dbName);
+            if (mongoDB != null) {
+                IMongoCollection<Record> mongoTable = mongoDB.GetCollection<Record>(tableName);
+                if (mongoTable != null) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         public bool removeCollection(string dbName, string tableName) {
             IMongoDatabase mongoDB = this.mongoClient.GetDatabase(dbName);
             if (mongoDB != null) {
@@ -85,12 +97,32 @@ namespace Server {
             return record;
         }
 
-        public void remove(string dbName, string tableName, string key) {
+        public void removeByKey(string dbName, string tableName, string key) {
             IMongoDatabase mongoDB = this.mongoClient.GetDatabase(dbName);
             if (mongoDB != null) {
                 IMongoCollection<Record> mongoTable = mongoDB.GetCollection<Record>(tableName);
                 if (mongoTable != null) {
                     mongoTable.DeleteOne(record => record.key == key);
+                }
+            }
+        }
+
+        public void removeAllByValue(string dbName, string tableName, string value) {
+            IMongoDatabase mongoDB = this.mongoClient.GetDatabase(dbName);
+            if (mongoDB != null) {
+                IMongoCollection<Record> mongoTable = mongoDB.GetCollection<Record>(tableName);
+                if (mongoTable != null) {
+                    mongoTable.DeleteMany(record => record.value == value);
+                }
+            }
+        }
+
+        public void clearCollection(string dbName, string tableName) {
+            IMongoDatabase mongoDB = this.mongoClient.GetDatabase(dbName);
+            if (mongoDB != null) {
+                IMongoCollection<Record> mongoTable = mongoDB.GetCollection<Record>(tableName);
+                if (mongoTable != null) {
+                    mongoTable.DeleteMany(_ => true);
                 }
             }
         }
