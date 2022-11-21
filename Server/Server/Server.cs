@@ -620,13 +620,6 @@ namespace Server {
                                 }
                             }
 
-                            string insertFinalValues = string.Join("#", insertValues);
-                            insertDataIntoIdxCollection(
-                                sqlQuery.INSERT_TABLE_NAME,
-                                insertPrimaryKey,
-                                insertFinalValues
-                            );
-
                             foreach (KeyValuePair<string, string> key in insertUniqueKeys) {
                                 insertDataIntoIdxCollection(
                                     "idx_" + sqlQuery.INSERT_TABLE_NAME + "_" + key.Key,
@@ -643,6 +636,7 @@ namespace Server {
                                 );
                             }
 
+                            bool checkReferenceTables = true;
                             foreach (ForeignKey foreignKey in insertFKs) {
                                 List<Record> referenceCollectionRecords = mongoDBService.getAll(currentDatabase, foreignKey.referencedTableName);
                                 if (referenceCollectionRecords.Count() > 0) {
@@ -654,14 +648,27 @@ namespace Server {
                                                     key.Value,
                                                     insertPrimaryKey
                                                 );
+                                            } else {
+                                                checkReferenceTables = false;
+                                                send(new Message(MessageAction.ERROR, "Nu exista inregistrarea in '" + foreignKey.referencedTableName + "'!"));
+                                                break;
                                             }
                                         }
                                     }
                                 }
                                 else {
-                                    send(new Message(MessageAction.ERROR, "Nu exista inregistrarea in '" + foreignKey.referencedTableKey + "'!"));
+                                    send(new Message(MessageAction.ERROR, "Nu exista inregistrarea in '" + foreignKey.referencedTableName + "'!"));
                                     break;
                                 }
+                            }
+
+                            if (checkReferenceTables == true) {
+                                string insertFinalValues = string.Join("#", insertValues);
+                                insertDataIntoIdxCollection(
+                                    sqlQuery.INSERT_TABLE_NAME,
+                                    insertPrimaryKey,
+                                    insertFinalValues
+                                );
                             }
                         }
 
