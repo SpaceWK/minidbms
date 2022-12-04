@@ -770,6 +770,36 @@ namespace Server {
                             return;
                         }
 
+                        List<string> selectAttributes = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/Structure", "name");
+                        bool verifyProjection = false;
+                        bool verifySelection = false;
+
+                        foreach (string projection in sqlQuery.SELECT_PROJECTION) {
+                            foreach (string attribute in selectAttributes) {
+                                if (projection == attribute) {
+                                    verifyProjection = true;
+                                }
+                            }
+                            if (verifyProjection == false) {
+                                send(new Message(MessageAction.ERROR, "Nu exista cheia in tabela '" + sqlQuery.SELECT_TABLE_NAME));
+                                return;
+                            }
+                            verifyProjection = false;
+                        }
+
+                        foreach (WhereCondition selection in sqlQuery.SELECT_SELECTION) {
+                            foreach (string attribute in selectAttributes) {
+                                if (selection.name == attribute) {
+                                    verifySelection = true;
+                                }
+                            }
+                            if (verifySelection == false) {
+                                send(new Message(MessageAction.ERROR, "Nu exista cheia in tabela '" + sqlQuery.SELECT_TABLE_NAME));
+                                return;
+                            }
+                            verifySelection = false;
+                        }
+
                         // TODO: Check for the projection & selection (where conditions) fields to exist in the table structure.
 
                         //
