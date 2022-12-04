@@ -16,6 +16,8 @@ namespace Server {
 
         DELETE,
 
+        SELECT,
+
         ERROR
     }
 
@@ -51,6 +53,13 @@ namespace Server {
 
         public string? DELETE_TABLE_NAME;
         public List<WhereCondition>? DELETE_TABLE_CONDITIONS;
+
+
+        // SELECT a, b, c FROM table WHERE a = 1;
+        public bool? SELECT_DISTINCT = false; // SELECT DISTINCT Country FROM Customers;
+        public List<string>? SELECT_PROJECTION; // a, b, c
+        public string? SELECT_TABLE_NAME; // table
+        public List<WhereCondition>? SELECT_SELECTION; // WHERE a = 1
 
 
         public SQLQuery(SQLQueryType type) {

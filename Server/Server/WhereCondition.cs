@@ -7,11 +7,8 @@ using System.Threading.Tasks;
 namespace Server {
     public enum ComparisonOperator {
         EQUAL,
-        NOT_EQUAL,
         LESS_THAN,
-        LESS_OR_EQUAL_THAN,
-        GREATER_THAN,
-        GREATER_OR_EQUAL_THAN
+        GREATER_THAN
     }
 
     public class WhereCondition {
