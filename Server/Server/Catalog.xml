@@ -1,3 +1,127 @@
 ﻿<?xml version="1.0" encoding="UTF-8"?>
 <Databases>
+  <Database databaseName="stud">
+    <Tables>
+      <Table tableName="disciplines" fileName="disciplines.b">
+        <Structure>
+          <Attribute name="DiscID" type="varchar" length="5" isnull="true">
+          </Attribute>
+          <Attribute name="DName" type="varchar" length="20" isnull="true">
+          </Attribute>
+          <Attribute name="CreditNr" type="int" length="11" isnull="true">
+          </Attribute>
+        </Structure>
+        <PrimaryKeys>
+          <PrimaryKeyAttribute>DiscID</PrimaryKeyAttribute>
+        </PrimaryKeys>
+        <ForeignKeys>
+        </ForeignKeys>
+        <UniqueKeys>
+        </UniqueKeys>
+        <IndexFiles>
+        </IndexFiles>
+      </Table>
+      <Table tableName="specialization" fileName="specialization.b">
+        <Structure>
+          <Attribute name="SpecID" type="varchar" length="5" isnull="true">
+          </Attribute>
+          <Attribute name="SpecName" type="varchar" length="40" isnull="true">
+          </Attribute>
+          <Attribute name="Language" type="varchar" length="20" isnull="true">
+          </Attribute>
+        </Structure>
+        <PrimaryKeys>
+          <PrimaryKeyAttribute>SpecID</PrimaryKeyAttribute>
+        </PrimaryKeys>
+        <ForeignKeys>
+        </ForeignKeys>
+        <UniqueKeys>
+        </UniqueKeys>
+        <IndexFiles>
+        </IndexFiles>
+      </Table>
+      <Table tableName="groups" fileName="groups.b">
+        <Structure>
+          <Attribute name="GroupID" type="int" length="11" isnull="true">
+          </Attribute>
+          <Attribute name="SpecID" type="varchar" length="20" isnull="true">
+          </Attribute>
+        </Structure>
+        <PrimaryKeys>
+          <PrimaryKeyAttribute>GroupID</PrimaryKeyAttribute>
+        </PrimaryKeys>
+        <ForeignKeys>
+          <ForeignKey name="SpecID">
+            <ForeignKeyAttribute>SpecID</ForeignKeyAttribute>
+            <References tableName="specialization">
+              <ReferenceTable>specialization</ReferenceTable>
+              <ReferenceAttribute>SpecID</ReferenceAttribute>
+            </References>
+          </ForeignKey>
+        </ForeignKeys>
+        <UniqueKeys>
+        </UniqueKeys>
+        <IndexFiles>
+        </IndexFiles>
+      </Table>
+      <Table tableName="students" fileName="students.b">
+        <Structure>
+          <Attribute name="StudID" type="int" length="11" isnull="true">
+          </Attribute>
+          <Attribute name="GroupID" type="int" length="11" isnull="true">
+          </Attribute>
+        </Structure>
+        <PrimaryKeys>
+          <PrimaryKeyAttribute>StudID</PrimaryKeyAttribute>
+        </PrimaryKeys>
+        <ForeignKeys>
+          <ForeignKey name="GroupID">
+            <ForeignKeyAttribute>GroupID</ForeignKeyAttribute>
+            <References tableName="groups">
+              <ReferenceTable>groups</ReferenceTable>
+              <ReferenceAttribute>GroupID</ReferenceAttribute>
+            </References>
+          </ForeignKey>
+        </ForeignKeys>
+        <UniqueKeys>
+        </UniqueKeys>
+        <IndexFiles>
+        </IndexFiles>
+      </Table>
+      <Table tableName="marks" fileName="marks.b">
+        <Structure>
+          <Attribute name="StudID" type="int" length="10" isnull="true">
+          </Attribute>
+          <Attribute name="DiscID" type="varchar" length="20" isnull="true">
+          </Attribute>
+          <Attribute name="Mark" type="int" length="11" isnull="true">
+          </Attribute>
+        </Structure>
+        <PrimaryKeys>
+          <PrimaryKeyAttribute>StudID</PrimaryKeyAttribute>
+          <PrimaryKeyAttribute>DiscID</PrimaryKeyAttribute>
+        </PrimaryKeys>
+        <ForeignKeys>
+          <ForeignKey name="StudID">
+            <ForeignKeyAttribute>StudID</ForeignKeyAttribute>
+            <References tableName="students">
+              <ReferenceTable>students</ReferenceTable>
+              <ReferenceAttribute>StudID</ReferenceAttribute>
+            </References>
+          </ForeignKey>
+          <ForeignKey name="DiscID">
+            <ForeignKeyAttribute>DiscID</ForeignKeyAttribute>
+            <References tableName="disciplines">
+              <ReferenceTable>disciplines</ReferenceTable>
+              <ReferenceAttribute>DiscID</ReferenceAttribute>
+            </References>
+          </ForeignKey>
+        </ForeignKeys>
+        <UniqueKeys>
+        </UniqueKeys>
+        <IndexFiles>
+        </IndexFiles>
+      </Table>
+    </Tables>
+  </Database>
 </Databases>
