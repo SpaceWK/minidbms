@@ -760,6 +760,23 @@ namespace Server {
                         send(new Message(MessageAction.SUCCESS, "Datele eliminate cu succes din tabela '" + sqlQuery.DELETE_TABLE_NAME + "'!"));
                         break;
 
+                    case SQLQueryType.SELECT:
+                        if (currentDatabase == null) {
+                            send(new Message(MessageAction.ERROR, "Nicio baza de date selectata."));
+                            return;
+                        }
+                        if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']")) {
+                            send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.SELECT_TABLE_NAME + "' nu exista."));
+                            return;
+                        }
+
+                        // TODO: Check for the projection & selection (where conditions) fields to exist in the table structure.
+
+                        //
+
+                        send(new Message(MessageAction.SUCCESS, "Select"));
+                        break;
+
                     default:
                         break;
                 }
@@ -959,21 +976,12 @@ namespace Server {
                                         case "=":
                                             whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.EQUAL, conditionArgs[2].Replace("\'", String.Empty)));
                                             break;
-                                        case "!=":
-                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.NOT_EQUAL, conditionArgs[2].Replace("\'", String.Empty)));
-                                            break;
                                         case "<":
                                             whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.LESS_THAN, conditionArgs[2].Replace("\'", String.Empty)));
                                             break;
-                                        case "<=":
-                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.LESS_OR_EQUAL_THAN, conditionArgs[2].Replace("\'", String.Empty)));
-                                            break;
                                         case ">":
                                             whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_THAN, conditionArgs[2].Replace("\'", String.Empty)));
-                                            break;
-                                        case ">=":
-                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_OR_EQUAL_THAN, conditionArgs[2].Replace("\'", String.Empty)));
-                                            break;
+                                            break;;
                                         default:
                                             break;
                                     }
@@ -983,6 +991,7 @@ namespace Server {
                                 sqlQuery.DELETE_TABLE_NAME = args[2];
                                 sqlQuery.DELETE_TABLE_CONDITIONS = whereConditions;
                             } else {
+                                // TODO: Delete without conditions can be possible.
                                 sqlQuery = new SQLQuery(SQLQueryType.ERROR);
                                 sqlQuery.error = "SQL query invalid.";
                             }
@@ -990,6 +999,71 @@ namespace Server {
                             sqlQuery = new SQLQuery(SQLQueryType.DELETE);
                             sqlQuery.DELETE_TABLE_NAME = args[2];
                             sqlQuery.DELETE_TABLE_CONDITIONS = null;
+                        }
+                    } else {
+                        sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                        sqlQuery.error = "SQL query invalid.";
+                    }
+                    break;
+
+                case "select":
+                    pattern = "(?<=SELECT )(.*)(?= FROM)";
+                    matches = Regex.Matches(statement, pattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
+                    string selectReplacedStatement = Regex.Replace(statement, pattern, "%");
+                    string[] selectReplacedArgs = selectReplacedStatement.Split(" ");
+
+                    if (selectReplacedStatement.Contains("FROM", StringComparison.OrdinalIgnoreCase)) {
+                        if (matches.Count() > 0) {
+                            List<string> projection = new List<string>();
+                            bool isDistinctSelect = false;
+
+                            if (matches[0].Contains("DISTINCT", StringComparison.OrdinalIgnoreCase)) {
+                                string distinctPattern = "(?<=DISTINCT )(.*)(?= FROM)";
+                                matches = Regex.Matches(statement, distinctPattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
+                                string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries); // Watch out for the attributes to be split by ",".
+                                foreach (string attribute in attributes) {
+                                    projection.Add(attribute);
+                                }
+
+                                isDistinctSelect = true;
+                            } else {
+                                string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries); // Watch out for the attributes to be split by ",".
+                                foreach (string attribute in attributes) {
+                                    projection.Add(attribute);
+                                }
+                            }
+
+                            string selectPattern = @"(?<=WHERE ).*";
+                            List<string> selectMatches = Regex.Matches(selectReplacedStatement, selectPattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
+                            List<WhereCondition> whereConditions = new List<WhereCondition>();
+                            if (selectMatches.Count() > 0) {
+                                string[] conditions = Regex.Split(selectMatches[0], " AND ", RegexOptions.IgnoreCase);
+                                foreach (string condition in conditions) {
+                                    string[] conditionArgs = condition.Split(" "); // Watch out for the conditions to be split by " ".
+                                    switch (conditionArgs[1]) {
+                                        case "=":
+                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.EQUAL, conditionArgs[2].Replace("\'", String.Empty)));
+                                            break;
+                                        case "<":
+                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.LESS_THAN, conditionArgs[2].Replace("\'", String.Empty)));
+                                            break;
+                                        case ">":
+                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_THAN, conditionArgs[2].Replace("\'", String.Empty)));
+                                            break;
+                                        default:
+                                            break;
+                                    }
+                                }
+                            }
+
+                            sqlQuery = new SQLQuery(SQLQueryType.SELECT);
+                            sqlQuery.SELECT_PROJECTION = projection;
+                            sqlQuery.SELECT_TABLE_NAME = selectReplacedArgs[3];
+                            sqlQuery.SELECT_DISTINCT = isDistinctSelect;
+                            sqlQuery.SELECT_SELECTION = whereConditions.Count() > 0 ? whereConditions : null;
+                        } else {
+                            sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                            sqlQuery.error = "SQL query invalid.";
                         }
                     } else {
                         sqlQuery = new SQLQuery(SQLQueryType.ERROR);

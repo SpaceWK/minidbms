@@ -51,7 +51,9 @@ DELETE FROM students WHERE GroupID = 531;
 
 
 # Select
-# TODO
+SELECT DISTINCT GroupID FROM students;
+SELECT Mark FROM marks WHERE StudID = 50 AND DiscID = 'OS';
+SELECT StudID, Mark FROM marks;
 
 
 DROP TABLE marks;
