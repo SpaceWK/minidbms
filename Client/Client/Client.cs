@@ -12,6 +12,7 @@ namespace Client {
         public static List<string> databasesList = new List<string>();
         public static List<string> tablesList = new List<string>();
         public static Dictionary<string, List<string>> tableData = new Dictionary<string, List<string>>();
+        public static Dictionary<string, List<string>> selectedData = new Dictionary<string, List<string>>();
 
         public static void Main(string[] args) {
             IPAddress ipAddress = Dns.GetHostEntry("localhost").AddressList[0];
@@ -45,6 +46,8 @@ namespace Client {
                 } else if (lastAction.action == MessageAction.SUCCESS) {
                     Console.ForegroundColor = ConsoleColor.DarkGreen;
                     Console.WriteLine(lastAction.value);
+                } else if (lastAction.action == MessageAction.SUCCESS_SELECT) {
+                    displaySelectData(lastAction.value);
                 }
                 Console.ResetColor();
 
@@ -127,6 +130,59 @@ namespace Client {
                     menu();
                     break;
             }
+        }
+
+        public static void displaySelectData(string message) {
+            Console.ForegroundColor = ConsoleColor.DarkGreen;
+            Console.WriteLine("Timp: {0} ms", 0.0);
+            Console.ResetColor();
+
+            Console.WriteLine();
+            for (int i = 0; i < Console.WindowWidth; i++) {
+                Console.Write("-");
+            }
+            Console.WriteLine();
+
+
+            string[] data = message.Split(":");
+            string[] tableFieldNames = data[0].Split(",");
+            string[] tableFieldValues = data[1].Split("^");
+
+            List<string> fieldValues;
+            int index = 0;
+            foreach (string name in tableFieldNames) {
+                fieldValues = new List<string>();
+
+                foreach (string item in tableFieldValues) {
+                    string[] values = item.Split("#");
+                    fieldValues.Add(values[index]);
+                }
+
+                selectedData.Add(name, fieldValues);
+                index++;
+            }
+
+
+            foreach (KeyValuePair<string, List<string>> item in selectedData) {
+                Console.Write(item.Key.PadRight(30));
+            }
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            for (int i = 0; i < selectedData.Count(); i++) {
+                foreach (KeyValuePair<string, List<string>> item in selectedData) {
+                    if (i < item.Value.Count()) {
+                        Console.Write(selectedData[item.Key][i].PadRight(30));
+                    } else {
+                        break;
+                    }
+                }
+
+                Console.WriteLine();
+            }
+            Console.ResetColor();
+
+            selectedData.Clear();
+            backMenu();
         }
 
         public static void tablesMenu() {
@@ -233,6 +289,9 @@ namespace Client {
                 case MessageAction.SELECT_DATABASE:
                     currentDatabase = response.value;
                     menu(false, null); // After selection, go directly to option 3: menu(false, null, 3);
+                    break;
+                case MessageAction.SUCCESS_SELECT:
+                    menu(true, response);
                     break;
                 default:
                     break;

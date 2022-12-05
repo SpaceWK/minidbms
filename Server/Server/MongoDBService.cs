@@ -73,6 +73,18 @@ namespace Server {
             return null;
         }
 
+        public List<Record> getAllByKey(string dbName, string tableName, string key) {
+            IMongoDatabase mongoDB = this.mongoClient.GetDatabase(dbName);
+            if (mongoDB != null) {
+                IMongoCollection<Record> mongoTable = mongoDB.GetCollection<Record>(tableName);
+                if (mongoTable != null) {
+                    return mongoTable.Find(record => record.key == key).ToList();
+                }
+            }
+
+            return null;
+        }
+
         public Record get(string dbName, string tableName, string key) {
             IMongoDatabase mongoDB = this.mongoClient.GetDatabase(dbName);
             if (mongoDB != null) {

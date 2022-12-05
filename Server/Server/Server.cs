@@ -255,28 +255,6 @@ namespace Server {
             return foreignKeys;
         }
 
-        public static List<string> getValuesByKey(string dbName, string tableName, string key) {
-            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
-            if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
-                if (File.Exists(tableFilePath)) {
-                    List<string> lines = File.ReadAllLines(tableFilePath).ToList();
-                    if (lines.Count > 0) {
-                        foreach (string line in lines) {
-                            if (line.StartsWith(key)) {
-                                string[] keyValue = line.Split("|");
-                                List<string> values = keyValue[1].Split("#").ToList();
-
-                                return values;
-                            }
-                        }
-                    }
-                }
-            }
-
-            return null;
-        }
-
         public static void insertDataIntoIdxCollection(string collection, string key, string value) {
             List<Record> records = mongoDBService.getAll(currentDatabase, collection);
             if (records.Count() > 0) {
@@ -772,9 +750,110 @@ namespace Server {
 
                         // TODO: Check for the projection & selection (where conditions) fields to exist in the table structure.
 
-                        //
+                        // DiscID,DName,CreditNr:DB1#Databases 1#7^DB#Data Structures#6
+                        // DName:Databases 1^Data Structures
+                        string message = "";
+                        message += string.Join(",", sqlQuery.SELECT_PROJECTION);
+                        message += ":";
 
-                        send(new Message(MessageAction.SUCCESS, "Select"));
+                        List<string> data = new List<string>();
+                        List<string> selectedData;
+
+                        if (sqlQuery.SELECT_SELECTION == null) {
+                            List<Record> selectRecords = mongoDBService.getAll(currentDatabase, sqlQuery.SELECT_TABLE_NAME);
+                            
+                            List<string> selectTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/PrimaryKeys");
+                            List<string> selectTableStructure = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/Structure", "name");
+                            selectTableStructure.RemoveAll(name => selectTablePKs.Contains(name));
+
+                            selectedData = new List<string>();
+                            foreach (Record selectRecord in selectRecords) {
+                                foreach (string selectKey in sqlQuery.SELECT_PROJECTION) {
+                                    if (selectTablePKs.Contains(selectKey)) {
+                                        selectedData.Add(selectRecord.key);
+                                    } else {
+                                        selectedData.Add(selectRecord.getKeyValue(selectKey, selectTableStructure));
+                                    } 
+                                }
+
+                                if (selectedData.Count() > 0) {
+                                    data.Add(string.Join("#", selectedData));
+                                }
+                            }
+
+                            message += string.Join("^", data);
+
+                            send(new Message(MessageAction.SUCCESS_SELECT, message));
+                            return;
+                        }
+
+
+                        
+
+                        List<string> selectionWhereAttributeNames = sqlQuery.SELECT_SELECTION.Select(item => item.name).ToList();
+                        string selectIDXTableName;
+                        List<string> selectIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/IndexFiles");
+                        foreach (string indexAttribute in selectIDXs) {
+                            WhereCondition indexConditionMatch = sqlQuery.SELECT_SELECTION.FirstOrDefault(item => item.name == indexAttribute);
+                            if (indexConditionMatch != null) {
+                                selectIDXTableName = "idx_" + sqlQuery.SELECT_TABLE_NAME + "_" + indexAttribute;
+                                if (mongoDBService.existsCollection(currentDatabase, selectIDXTableName)) {
+                                    List<Record> selectIDXRecords = mongoDBService.getAll(currentDatabase, selectIDXTableName);
+
+                                    bool isNumeric = int.TryParse(indexConditionMatch.value, out int n);
+
+                                    foreach (Record record in selectIDXRecords) {
+                                        selectedData = new List<string>();
+
+                                        switch (indexConditionMatch.comparison) {
+                                            case ComparisonOperator.EQUAL:
+                                                if (record.key == indexConditionMatch.value) {
+                                                    List<Record> selectTableRecords = mongoDBService.getAllByKey(currentDatabase, sqlQuery.SELECT_TABLE_NAME, record.value);
+
+                                                    List<string> selectTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/PrimaryKeys");
+                                                    List<string> selectTableStructure = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/Structure", "name");
+                                                    selectTableStructure.RemoveAll(name => selectTablePKs.Contains(name));
+
+                                                    foreach (Record selectTableRecord in selectTableRecords) {
+                                                        foreach (string selectKey in sqlQuery.SELECT_PROJECTION) {
+                                                            if (selectTablePKs.Contains(selectKey)) {
+                                                                selectedData.Add(selectTableRecord.key);
+                                                            } else {
+                                                                selectedData.Add(selectTableRecord.getKeyValue(selectKey, selectTableStructure));
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                break;
+                                            case ComparisonOperator.LESS_THAN:
+                                                if (isNumeric && int.Parse(record.key) < n) { // Check if those need to be inverted.
+                                                    //
+                                                } else {
+                                                    send(new Message(MessageAction.ERROR, "Operatorii '>' si '<' se pot folosi numai cu valori numerice."));
+                                                    return;
+                                                }
+                                                break;
+                                            case ComparisonOperator.GREATER_THAN:
+                                                if (isNumeric && int.Parse(record.key) > n) {
+                                                    //
+                                                } else {
+                                                    send(new Message(MessageAction.ERROR, "Operatorii '>' si '<' se pot folosi numai cu valori numerice."));
+                                                    return;
+                                                }
+                                                break;
+                                        }
+
+                                        if (selectedData.Count() > 0) {
+                                            data.Add(string.Join("#", selectedData));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        message += string.Join("^", data);
+
+                        send(new Message(MessageAction.SUCCESS_SELECT, message));
                         break;
 
                     default:
