@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Timers;
 using System.Xml.Linq;
 
 namespace Client {
@@ -12,11 +14,17 @@ namespace Client {
         public static List<string> databasesList = new List<string>();
         public static List<string> tablesList = new List<string>();
         public static Dictionary<string, List<string>> tableData = new Dictionary<string, List<string>>();
-        public static Dictionary<string, List<string>> selectedData = new Dictionary<string, List<string>>();
+
+        public static double selectTime = 0.0;
+        public static System.Timers.Timer selectTimer = new System.Timers.Timer();
+        public static Dictionary<string, List<string>> selectData = new Dictionary<string, List<string>>();
 
         public static void Main(string[] args) {
             IPAddress ipAddress = Dns.GetHostEntry("localhost").AddressList[0];
             IPEndPoint ipEndPoint = new IPEndPoint(ipAddress, 11000);
+
+            selectTimer.Elapsed += new System.Timers.ElapsedEventHandler(TimerEvent);
+            selectTimer.Interval = 1;
 
             try {
                 client = new Socket(ipAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
@@ -35,6 +43,10 @@ namespace Client {
             } catch (Exception e) {
                 Console.WriteLine("Exception: {0}", e.ToString());
             }
+        }
+
+        private static void TimerEvent(object source, ElapsedEventArgs e) {
+            selectTime += 0.1;
         }
 
         public static void menu(bool displayLastAction = false, Message lastAction = null, int selectedOption = -1) {
@@ -116,6 +128,11 @@ namespace Client {
                     var query = Console.ReadLine();
                     send(new Message(MessageAction.SQL_QUERY_REQUEST, query));
 
+                    if (query.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)) {
+                        selectTime = 0.0;
+                        selectTimer.Start();
+                    }
+
                     receiveFromServer();
 
                     break;
@@ -134,7 +151,9 @@ namespace Client {
 
         public static void displaySelectData(string message) {
             Console.ForegroundColor = ConsoleColor.DarkGreen;
-            Console.WriteLine("Timp: {0} ms", 0.0);
+            Console.WriteLine("Timp: {0}s", selectTime.ToString("0.00"));
+            selectTimer.Stop();
+            selectTime = 0.0;
             Console.ResetColor();
 
             Console.WriteLine();
@@ -144,44 +163,15 @@ namespace Client {
             Console.WriteLine();
 
 
-            string[] data = message.Split(":");
-            string[] tableFieldNames = data[0].Split(",");
-            string[] tableFieldValues = data[1].Split("^");
-
-            List<string> fieldValues;
-            int index = 0;
-            foreach (string name in tableFieldNames) {
-                fieldValues = new List<string>();
-
-                foreach (string item in tableFieldValues) {
-                    string[] values = item.Split("#");
-                    fieldValues.Add(values[index]);
-                }
-
-                selectedData.Add(name, fieldValues);
-                index++;
+            if (message != "NO_RESULTS") {
+                parseData(message, selectData);
+                printData(selectData);
+            } else {
+                Console.WriteLine("Nu exista rezultate.");
             }
 
 
-            foreach (KeyValuePair<string, List<string>> item in selectedData) {
-                Console.Write(item.Key.PadRight(30));
-            }
-            Console.WriteLine();
-            Console.ForegroundColor = ConsoleColor.DarkGray;
-            for (int i = 0; i < selectedData.Count(); i++) {
-                foreach (KeyValuePair<string, List<string>> item in selectedData) {
-                    if (i < item.Value.Count()) {
-                        Console.Write(selectedData[item.Key][i].PadRight(30));
-                    } else {
-                        break;
-                    }
-                }
-
-                Console.WriteLine();
-            }
-            Console.ResetColor();
-
-            selectedData.Clear();
+            selectData.Clear();
             backMenu();
         }
 
@@ -196,23 +186,7 @@ namespace Client {
             }
             Console.WriteLine();
             if (tableData.Count() > 0) {
-                foreach (KeyValuePair<string, List<string>> item in tableData) {
-                    Console.Write(item.Key.PadRight(30));
-                }
-                Console.WriteLine();
-                Console.ForegroundColor = ConsoleColor.DarkGray;
-                for (int i = 0; i < tableData.Count(); i++) {
-                    foreach (KeyValuePair<string, List<string>> item in tableData) {
-                        if (i < item.Value.Count()) {
-                            Console.Write(tableData[item.Key][i].PadRight(30));
-                        } else {
-                            break;
-                        }
-                    }
-
-                    Console.WriteLine();
-                }
-                Console.ResetColor();
+                printData(tableData);
 
                 tableData.Clear();
                 backMenu();
@@ -246,6 +220,50 @@ namespace Client {
             }
         }
 
+        public static void parseData(string data, Dictionary<string, List<string>> dictionary) {
+            // DName:Databases 1^Data Structures^C Programming
+            // DiscID,DName:DB1#Databases 1^DB#Data Structures^CP#C Programming
+
+            string[] parts = data.Split(":");
+            string[] tableFieldNames = parts[0].Split(",");
+            string[] tableFieldValues = parts[1].Split("^");
+
+            List<string> fieldValues;
+            int index = 0;
+            foreach (string name in tableFieldNames) {
+                fieldValues = new List<string>();
+
+                foreach (string item in tableFieldValues) {
+                    if (item.Contains("#")) {
+                        string[] values = item.Split("#");
+                        fieldValues.Add(values[index]);
+                    } else {
+                        fieldValues.Add(item);
+                    }
+                }
+
+                dictionary.Add(name, fieldValues);
+                index++;
+            }
+        }
+
+        public static void printData(Dictionary<string, List<string>> dictionary) {
+            foreach (KeyValuePair<string, List<string>> item in dictionary) {
+                Console.Write(item.Key.PadRight(30));
+            }
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+
+            for (int i = 0; i < dictionary.FirstOrDefault().Value.Count(); i++) {
+                foreach (KeyValuePair<string, List<string>> item in dictionary) {
+                    Console.Write(dictionary[item.Key][i].PadRight(30));
+                }
+
+                Console.WriteLine();
+            }
+            Console.ResetColor();
+        }
+
         public static void interpretResponse(Message response) {
             switch (response.action) {
                 case MessageAction.SQL_QUERY_RESPONSE:
@@ -266,23 +284,7 @@ namespace Client {
                     menu(false, null, 2);
                     break;
                 case MessageAction.GET_TABLE_DATA_RESPONSE:
-                    string[] data = response.value.Split(":");
-                    string[] tableFieldNames = data[0].Split(",");
-                    string[] tableFieldValues = data[1].Split("^");
-
-                    List<string> fieldValues;
-                    int index = 0;
-                    foreach (string name in tableFieldNames) {
-                        fieldValues = new List<string>();
-
-                        foreach (string item in tableFieldValues) {
-                            string[] values = item.Split("#");
-                            fieldValues.Add(values[index]);
-                        }
-
-                        tableData.Add(name, fieldValues);
-                        index++;
-                    }
+                    parseData(response.value, tableData);
 
                     menu(false, null, 2);
                     break;

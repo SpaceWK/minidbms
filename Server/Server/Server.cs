@@ -255,6 +255,16 @@ namespace Server {
             return foreignKeys;
         }
 
+        public static List<string> getXmlTableStructure(string tableName, bool withoutPKs = false) {
+            List<string> selectTableStructure = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + tableName + "']/Structure", "name");
+            if (withoutPKs) {
+                List<string> selectTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + tableName + "']/PrimaryKeys");
+                selectTableStructure.RemoveAll(name => selectTablePKs.Contains(name));
+            }
+
+            return selectTableStructure;
+        }
+
         public static void insertDataIntoIdxCollection(string collection, string key, string value) {
             List<Record> records = mongoDBService.getAll(currentDatabase, collection);
             if (records.Count() > 0) {
@@ -750,8 +760,6 @@ namespace Server {
 
                         // TODO: Check for the projection & selection (where conditions) fields to exist in the table structure.
 
-                        // DiscID,DName,CreditNr:DB1#Databases 1#7^DB#Data Structures#6
-                        // DName:Databases 1^Data Structures
                         string message = "";
                         message += string.Join(",", sqlQuery.SELECT_PROJECTION);
                         message += ":";
@@ -759,15 +767,15 @@ namespace Server {
                         List<string> data = new List<string>();
                         List<string> selectedData;
 
+                        // No conditions
                         if (sqlQuery.SELECT_SELECTION == null) {
                             List<Record> selectRecords = mongoDBService.getAll(currentDatabase, sqlQuery.SELECT_TABLE_NAME);
-                            
                             List<string> selectTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/PrimaryKeys");
-                            List<string> selectTableStructure = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/Structure", "name");
-                            selectTableStructure.RemoveAll(name => selectTablePKs.Contains(name));
+                            List<string> selectTableStructure = getXmlTableStructure(sqlQuery.SELECT_TABLE_NAME, true);
 
-                            selectedData = new List<string>();
                             foreach (Record selectRecord in selectRecords) {
+                                selectedData = new List<string>();
+
                                 foreach (string selectKey in sqlQuery.SELECT_PROJECTION) {
                                     if (selectTablePKs.Contains(selectKey)) {
                                         selectedData.Add(selectRecord.key);
@@ -781,15 +789,17 @@ namespace Server {
                                 }
                             }
 
-                            message += string.Join("^", data);
+                            if (data.Count() > 0) {
+                                message += string.Join("^", data);
+                            } else {
+                                message = "NO_RESULTS";
+                            }
 
                             send(new Message(MessageAction.SUCCESS_SELECT, message));
                             return;
                         }
 
-
-                        
-
+                        // With conditions
                         List<string> selectionWhereAttributeNames = sqlQuery.SELECT_SELECTION.Select(item => item.name).ToList();
                         string selectIDXTableName;
                         List<string> selectIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/IndexFiles");
@@ -811,8 +821,7 @@ namespace Server {
                                                     List<Record> selectTableRecords = mongoDBService.getAllByKey(currentDatabase, sqlQuery.SELECT_TABLE_NAME, record.value);
 
                                                     List<string> selectTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/PrimaryKeys");
-                                                    List<string> selectTableStructure = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/Structure", "name");
-                                                    selectTableStructure.RemoveAll(name => selectTablePKs.Contains(name));
+                                                    List<string> selectTableStructure = getXmlTableStructure(sqlQuery.SELECT_TABLE_NAME, true);
 
                                                     foreach (Record selectTableRecord in selectTableRecords) {
                                                         foreach (string selectKey in sqlQuery.SELECT_PROJECTION) {
@@ -851,7 +860,11 @@ namespace Server {
                             }
                         }
 
-                        message += string.Join("^", data);
+                        if (data.Count() > 0) {
+                            message += string.Join("^", data);
+                        } else {
+                            message = "NO_RESULTS";
+                        }
 
                         send(new Message(MessageAction.SUCCESS_SELECT, message));
                         break;
