@@ -849,7 +849,7 @@ namespace Server {
 
                                         foreach (Record idxSelectRecord in idxSelectRecords) {
                                             List<Record> mainTableSelectRecords = mongoDBService.getAllByKey(currentDatabase, sqlQuery.SELECT_TABLE_NAME, idxSelectRecord.value);
-                                            conditionRecords = conditionRecords.Concat(mainTableSelectRecords).ToList();
+                                            conditionRecords = conditionRecords.Union(mainTableSelectRecords).ToList();
                                         }
                                     }
                                 } else {
@@ -857,11 +857,15 @@ namespace Server {
                                     foreach (Record mainTableSelectRecord in mainTableSelectRecords) {
                                         if (selectTablePKs.Contains(condition.name)) {
                                             if (mainTableSelectRecord.key == condition.value) {
-                                                conditionRecords.Add(mainTableSelectRecord);
+                                                if (conditionRecords.Contains(mainTableSelectRecord)) {
+                                                    conditionRecords.Add(mainTableSelectRecord);
+                                                }
                                             }
                                         } else {
                                             if (mainTableSelectRecord.getKeyValue(condition.name, selectTableStructure) == condition.value) {
-                                                conditionRecords.Add(mainTableSelectRecord);
+                                                if (conditionRecords.Contains(mainTableSelectRecord)) {
+                                                    conditionRecords.Add(mainTableSelectRecord);
+                                                }
                                             }
                                         }
                                     }
@@ -870,7 +874,7 @@ namespace Server {
                                 // Select without indexes
                             }
 
-                            selectedRecords = selectedRecords.Concat(conditionRecords).ToList();
+                            selectedRecords = selectedRecords.Union(conditionRecords).ToList();
                         }
 
                         foreach (Record selectedRecord in selectedRecords) {
