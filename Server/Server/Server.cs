@@ -801,63 +801,52 @@ namespace Server {
 
                         // With conditions
                         List<string> selectionWhereAttributeNames = sqlQuery.SELECT_SELECTION.Select(item => item.name).ToList();
-                        string selectIDXTableName;
+                        
                         List<string> selectIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/IndexFiles");
-                        foreach (string indexAttribute in selectIDXs) {
-                            WhereCondition indexConditionMatch = sqlQuery.SELECT_SELECTION.FirstOrDefault(item => item.name == indexAttribute);
-                            if (indexConditionMatch != null) {
-                                selectIDXTableName = "idx_" + sqlQuery.SELECT_TABLE_NAME + "_" + indexAttribute;
-                                if (mongoDBService.existsCollection(currentDatabase, selectIDXTableName)) {
-                                    List<Record> selectIDXRecords = mongoDBService.getAll(currentDatabase, selectIDXTableName);
-
+                        if (selectIDXs.Count() > 0) {
+                            string selectIDXTableName;
+                            foreach (string indexAttribute in selectIDXs) {
+                                WhereCondition indexConditionMatch = sqlQuery.SELECT_SELECTION.FirstOrDefault(item => item.name == indexAttribute);
+                                if (indexConditionMatch != null) {
                                     bool isNumeric = int.TryParse(indexConditionMatch.value, out int n);
+                                    if (!isNumeric) {
+                                        send(new Message(MessageAction.ERROR, "Operatorii '>' si '<' se folosesc numai cu valori numerice."));
+                                        return;
+                                    }
 
-                                    foreach (Record record in selectIDXRecords) {
-                                        selectedData = new List<string>();
+                                    selectIDXTableName = "idx_" + sqlQuery.SELECT_TABLE_NAME + "_" + indexAttribute;
+                                    if (mongoDBService.existsCollection(currentDatabase, selectIDXTableName)) {
+                                        List<Record> selectIDXRecords = mongoDBService.getAllByKeyWithCondition(currentDatabase, selectIDXTableName, indexConditionMatch);
 
-                                        switch (indexConditionMatch.comparison) {
-                                            case ComparisonOperator.EQUAL:
-                                                if (record.key == indexConditionMatch.value) {
-                                                    List<Record> selectTableRecords = mongoDBService.getAllByKey(currentDatabase, sqlQuery.SELECT_TABLE_NAME, record.value);
+                                        foreach (Record record in selectIDXRecords) {
+                                            selectedData = new List<string>();
 
-                                                    List<string> selectTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/PrimaryKeys");
-                                                    List<string> selectTableStructure = getXmlTableStructure(sqlQuery.SELECT_TABLE_NAME, true);
+                                            List<Record> selectTableRecords = mongoDBService.getAllByKey(currentDatabase, sqlQuery.SELECT_TABLE_NAME, record.value);
 
-                                                    foreach (Record selectTableRecord in selectTableRecords) {
-                                                        foreach (string selectKey in sqlQuery.SELECT_PROJECTION) {
-                                                            if (selectTablePKs.Contains(selectKey)) {
-                                                                selectedData.Add(selectTableRecord.key);
-                                                            } else {
-                                                                selectedData.Add(selectTableRecord.getKeyValue(selectKey, selectTableStructure));
-                                                            }
-                                                        }
+                                            List<string> selectTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/PrimaryKeys");
+                                            List<string> selectTableStructure = getXmlTableStructure(sqlQuery.SELECT_TABLE_NAME, true);
+
+                                            foreach (Record selectTableRecord in selectTableRecords) {
+                                                foreach (string selectKey in sqlQuery.SELECT_PROJECTION) {
+                                                    if (selectTablePKs.Contains(selectKey)) {
+                                                        selectedData.Add(selectTableRecord.key);
+                                                    } else {
+                                                        selectedData.Add(selectTableRecord.getKeyValue(selectKey, selectTableStructure));
                                                     }
                                                 }
-                                                break;
-                                            case ComparisonOperator.LESS_THAN:
-                                                if (isNumeric && int.Parse(record.key) < n) { // Check if those need to be inverted.
-                                                    //
-                                                } else {
-                                                    send(new Message(MessageAction.ERROR, "Operatorii '>' si '<' se pot folosi numai cu valori numerice."));
-                                                    return;
-                                                }
-                                                break;
-                                            case ComparisonOperator.GREATER_THAN:
-                                                if (isNumeric && int.Parse(record.key) > n) {
-                                                    //
-                                                } else {
-                                                    send(new Message(MessageAction.ERROR, "Operatorii '>' si '<' se pot folosi numai cu valori numerice."));
-                                                    return;
-                                                }
-                                                break;
-                                        }
+                                            }
 
-                                        if (selectedData.Count() > 0) {
-                                            data.Add(string.Join("#", selectedData));
+                                            if (selectedData.Count() > 0) {
+                                                data.Add(string.Join("#", selectedData));
+                                            }
                                         }
                                     }
+                                } else {
+                                    // No index for current condition.
                                 }
                             }
+                        } else {
+                            // Select without indexes.
                         }
 
                         if (data.Count() > 0) {
