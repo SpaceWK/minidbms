@@ -1,4 +1,5 @@
-﻿using MongoDB.Driver;
+﻿using MongoDB.Bson;
+using MongoDB.Driver;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -67,6 +68,52 @@ namespace Server {
                 IMongoCollection<Record> mongoTable = mongoDB.GetCollection<Record>(tableName);
                 if (mongoTable != null) {
                     return mongoTable.Find(_ => true).ToList();
+                }
+            }
+
+            return null;
+        }
+
+        public List<Record> getAllByKey(string dbName, string tableName, string key) {
+            IMongoDatabase mongoDB = this.mongoClient.GetDatabase(dbName);
+            if (mongoDB != null) {
+                IMongoCollection<Record> mongoTable = mongoDB.GetCollection<Record>(tableName);
+                if (mongoTable != null) {
+                    return mongoTable.Find(record => record.key == key).ToList();
+                }
+            }
+
+            return null;
+        }
+
+        public List<Record> getAllByKeyWithCondition(string dbName, string tableName, WhereCondition condition) {
+            IMongoDatabase mongoDB = this.mongoClient.GetDatabase(dbName);
+            if (mongoDB != null) {
+                IMongoCollection<Record> mongoTable = mongoDB.GetCollection<Record>(tableName);
+                if (mongoTable != null) {
+                    switch (condition.comparison) {
+                        case ComparisonOperator.EQUAL:
+                            return mongoTable.Find(
+                                Builders<Record>.Filter.Eq(record => record.key, condition.value)
+                            ).ToList();
+                            break;
+                        case ComparisonOperator.LESS_THAN:
+                            return mongoTable.Aggregate()
+                                .AppendStage<Record>("{ $set : { _KeyInt : { $toInt : '$_id' } } }")
+                                .Match(Builders<Record>.Filter.Lt("_KeyInt", int.Parse(condition.value)))
+                                .AppendStage<object>("{ $unset : '_KeyInt' }")
+                                .As<Record>()
+                            .ToList();
+                            break;
+                        case ComparisonOperator.GREATER_THAN:
+                            return mongoTable.Aggregate()
+                                .AppendStage<Record>("{ $set : { _KeyInt : { $toInt : '$_id' } } }")
+                                .Match(Builders<Record>.Filter.Gt("_KeyInt", int.Parse(condition.value)))
+                                .AppendStage<object>("{ $unset : '_KeyInt' }")
+                                .As<Record>()
+                            .ToList();
+                            break;
+                    }
                 }
             }
 

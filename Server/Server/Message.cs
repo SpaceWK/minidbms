@@ -12,6 +12,7 @@ namespace Server {
         GET_TABLE_DATA_RESPONSE,
         ERROR,
         SUCCESS,
+        SUCCESS_SELECT,
         CLOSE_CONNECTION
     }
 

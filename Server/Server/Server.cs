@@ -255,26 +255,14 @@ namespace Server {
             return foreignKeys;
         }
 
-        public static List<string> getValuesByKey(string dbName, string tableName, string key) {
-            string dbDirectoryPath = Path.Combine(workingPath, "Databases", dbName);
-            if (Directory.Exists(dbDirectoryPath)) {
-                string tableFilePath = Path.Combine(dbDirectoryPath, tableName + ".kv");
-                if (File.Exists(tableFilePath)) {
-                    List<string> lines = File.ReadAllLines(tableFilePath).ToList();
-                    if (lines.Count > 0) {
-                        foreach (string line in lines) {
-                            if (line.StartsWith(key)) {
-                                string[] keyValue = line.Split("|");
-                                List<string> values = keyValue[1].Split("#").ToList();
-
-                                return values;
-                            }
-                        }
-                    }
-                }
+        public static List<string> getXmlTableStructure(string tableName, bool withoutPKs = false) {
+            List<string> selectTableStructure = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + tableName + "']/Structure", "name");
+            if (withoutPKs) {
+                List<string> selectTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + tableName + "']/PrimaryKeys");
+                selectTableStructure.RemoveAll(name => selectTablePKs.Contains(name));
             }
 
-            return null;
+            return selectTableStructure;
         }
 
         public static void insertDataIntoIdxCollection(string collection, string key, string value) {
@@ -802,9 +790,102 @@ namespace Server {
 
                         // TODO: Check for the projection & selection (where conditions) fields to exist in the table structure.
 
-                        //
+                        string message = "";
+                        message += string.Join(",", sqlQuery.SELECT_PROJECTION);
+                        message += ":";
 
-                        send(new Message(MessageAction.SUCCESS, "Select"));
+                        List<string> data = new List<string>();
+                        List<string> selectedData;
+
+                        // No conditions
+                        if (sqlQuery.SELECT_SELECTION == null) {
+                            List<Record> selectRecords = mongoDBService.getAll(currentDatabase, sqlQuery.SELECT_TABLE_NAME);
+                            List<string> selectTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/PrimaryKeys");
+                            List<string> selectTableStructure = getXmlTableStructure(sqlQuery.SELECT_TABLE_NAME, true);
+
+                            foreach (Record selectRecord in selectRecords) {
+                                selectedData = new List<string>();
+
+                                foreach (string selectKey in sqlQuery.SELECT_PROJECTION) {
+                                    if (selectTablePKs.Contains(selectKey)) {
+                                        selectedData.Add(selectRecord.key);
+                                    } else {
+                                        selectedData.Add(selectRecord.getKeyValue(selectKey, selectTableStructure));
+                                    } 
+                                }
+
+                                if (selectedData.Count() > 0) {
+                                    data.Add(string.Join("#", selectedData));
+                                }
+                            }
+
+                            if (data.Count() > 0) {
+                                message += string.Join("^", data);
+                            } else {
+                                message = "NO_RESULTS";
+                            }
+
+                            send(new Message(MessageAction.SUCCESS_SELECT, message));
+                            return;
+                        }
+
+                        // With conditions
+                        List<string> selectionWhereAttributeNames = sqlQuery.SELECT_SELECTION.Select(item => item.name).ToList();
+                        
+                        List<string> selectIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/IndexFiles");
+                        if (selectIDXs.Count() > 0) {
+                            string selectIDXTableName;
+                            foreach (string indexAttribute in selectIDXs) {
+                                WhereCondition indexConditionMatch = sqlQuery.SELECT_SELECTION.FirstOrDefault(item => item.name == indexAttribute);
+                                if (indexConditionMatch != null) {
+                                    bool isNumeric = int.TryParse(indexConditionMatch.value, out int n);
+                                    if (!isNumeric) {
+                                        send(new Message(MessageAction.ERROR, "Operatorii '>' si '<' se folosesc numai cu valori numerice."));
+                                        return;
+                                    }
+
+                                    selectIDXTableName = "idx_" + sqlQuery.SELECT_TABLE_NAME + "_" + indexAttribute;
+                                    if (mongoDBService.existsCollection(currentDatabase, selectIDXTableName)) {
+                                        List<Record> selectIDXRecords = mongoDBService.getAllByKeyWithCondition(currentDatabase, selectIDXTableName, indexConditionMatch);
+
+                                        foreach (Record record in selectIDXRecords) {
+                                            selectedData = new List<string>();
+
+                                            List<Record> selectTableRecords = mongoDBService.getAllByKey(currentDatabase, sqlQuery.SELECT_TABLE_NAME, record.value);
+
+                                            List<string> selectTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/PrimaryKeys");
+                                            List<string> selectTableStructure = getXmlTableStructure(sqlQuery.SELECT_TABLE_NAME, true);
+
+                                            foreach (Record selectTableRecord in selectTableRecords) {
+                                                foreach (string selectKey in sqlQuery.SELECT_PROJECTION) {
+                                                    if (selectTablePKs.Contains(selectKey)) {
+                                                        selectedData.Add(selectTableRecord.key);
+                                                    } else {
+                                                        selectedData.Add(selectTableRecord.getKeyValue(selectKey, selectTableStructure));
+                                                    }
+                                                }
+                                            }
+
+                                            if (selectedData.Count() > 0) {
+                                                data.Add(string.Join("#", selectedData));
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // No index for current condition.
+                                }
+                            }
+                        } else {
+                            // Select without indexes.
+                        }
+
+                        if (data.Count() > 0) {
+                            message += string.Join("^", data);
+                        } else {
+                            message = "NO_RESULTS";
+                        }
+
+                        send(new Message(MessageAction.SUCCESS_SELECT, message));
                         break;
 
                     default:
