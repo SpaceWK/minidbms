@@ -7,7 +7,7 @@ CREATE TABLE disciplines (DiscID VARCHAR(5) PRIMARY KEY, DName VARCHAR(20), Cred
 
 INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('DB1', 'Databases 1', 7);
 INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('DB', 'Data Structures', 6);
-INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('CP', 'C Programming', 8);
+INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('CP', 'C Programming', 6);
 
 
 # Specialization
