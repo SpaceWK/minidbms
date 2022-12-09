@@ -55,9 +55,9 @@ SELECT DISTINCT GroupID FROM students;
 
 SELECT DName, CreditNr FROM disciplines;
 
-SELECT DName FROM disciplines WHERE CreditNr = 6;
 SELECT DName, CreditNr FROM disciplines WHERE CreditNr = 6;
 SELECT DiscID, DName FROM disciplines WHERE CreditNr > 1;
+SELECT CreditNr FROM disciplines WHERE CreditNr > 1 AND DName = 'Databases 1';
 
 SELECT Mark FROM marks WHERE StudID = 50 AND DiscID = 'OS';
 SELECT StudID, Mark FROM marks;

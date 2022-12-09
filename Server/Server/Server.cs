@@ -758,6 +758,9 @@ namespace Server {
                             return;
                         }
 
+                        List<string> selectTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/PrimaryKeys");
+                        List<string> selectTableStructure = getXmlTableStructure(sqlQuery.SELECT_TABLE_NAME, true);
+
                         List<string> selectAttributes = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/Structure", "name");
                         bool verifyProjection = false;
                         bool verifySelection = false;
@@ -800,9 +803,6 @@ namespace Server {
                         // No conditions
                         if (sqlQuery.SELECT_SELECTION == null) {
                             List<Record> selectRecords = mongoDBService.getAll(currentDatabase, sqlQuery.SELECT_TABLE_NAME);
-                            List<string> selectTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/PrimaryKeys");
-                            List<string> selectTableStructure = getXmlTableStructure(sqlQuery.SELECT_TABLE_NAME, true);
-
                             foreach (Record selectRecord in selectRecords) {
                                 selectedData = new List<string>();
 
@@ -830,53 +830,67 @@ namespace Server {
                         }
 
                         // With conditions
-                        List<string> selectionWhereAttributeNames = sqlQuery.SELECT_SELECTION.Select(item => item.name).ToList();
-                        
+                        List<Record> selectedRecords = new List<Record>();
+                        List<Record> conditionRecords = new List<Record>();
+
                         List<string> selectIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/IndexFiles");
-                        if (selectIDXs.Count() > 0) {
-                            string selectIDXTableName;
-                            foreach (string indexAttribute in selectIDXs) {
-                                WhereCondition indexConditionMatch = sqlQuery.SELECT_SELECTION.FirstOrDefault(item => item.name == indexAttribute);
-                                if (indexConditionMatch != null) {
-                                    bool isNumeric = int.TryParse(indexConditionMatch.value, out int n);
+                        foreach (WhereCondition condition in sqlQuery.SELECT_SELECTION) {
+                            if (selectIDXs.Count() > 0) {
+                                if (selectIDXs.Contains(condition.name)) {
+                                    bool isNumeric = int.TryParse(condition.value, out int intConditionValue);
                                     if (!isNumeric) {
                                         send(new Message(MessageAction.ERROR, "Operatorii '>' si '<' se folosesc numai cu valori numerice."));
                                         return;
                                     }
 
-                                    selectIDXTableName = "idx_" + sqlQuery.SELECT_TABLE_NAME + "_" + indexAttribute;
-                                    if (mongoDBService.existsCollection(currentDatabase, selectIDXTableName)) {
-                                        List<Record> selectIDXRecords = mongoDBService.getAllByKeyWithCondition(currentDatabase, selectIDXTableName, indexConditionMatch);
+                                    string idxSelectTableName = "idx_" + sqlQuery.SELECT_TABLE_NAME + "_" + condition.name;
+                                    if (mongoDBService.existsCollection(currentDatabase, idxSelectTableName)) {
+                                        List<Record> idxSelectRecords = mongoDBService.getAllByKeyWithCondition(currentDatabase, idxSelectTableName, condition);
 
-                                        foreach (Record record in selectIDXRecords) {
-                                            selectedData = new List<string>();
-
-                                            List<Record> selectTableRecords = mongoDBService.getAllByKey(currentDatabase, sqlQuery.SELECT_TABLE_NAME, record.value);
-
-                                            List<string> selectTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/PrimaryKeys");
-                                            List<string> selectTableStructure = getXmlTableStructure(sqlQuery.SELECT_TABLE_NAME, true);
-
-                                            foreach (Record selectTableRecord in selectTableRecords) {
-                                                foreach (string selectKey in sqlQuery.SELECT_PROJECTION) {
-                                                    if (selectTablePKs.Contains(selectKey)) {
-                                                        selectedData.Add(selectTableRecord.key);
-                                                    } else {
-                                                        selectedData.Add(selectTableRecord.getKeyValue(selectKey, selectTableStructure));
-                                                    }
-                                                }
-                                            }
-
-                                            if (selectedData.Count() > 0) {
-                                                data.Add(string.Join("#", selectedData));
-                                            }
+                                        foreach (Record idxSelectRecord in idxSelectRecords) {
+                                            List<Record> mainTableSelectRecords = mongoDBService.getAllByKey(currentDatabase, sqlQuery.SELECT_TABLE_NAME, idxSelectRecord.value);
+                                            conditionRecords = conditionRecords.Union(mainTableSelectRecords).ToList();
                                         }
                                     }
                                 } else {
-                                    // No index for current condition.
+                                    List<Record> mainTableSelectRecords = mongoDBService.getAll(currentDatabase, sqlQuery.SELECT_TABLE_NAME);
+                                    foreach (Record mainTableSelectRecord in mainTableSelectRecords) {
+                                        if (selectTablePKs.Contains(condition.name)) {
+                                            if (mainTableSelectRecord.key == condition.value) {
+                                                if (conditionRecords.Contains(mainTableSelectRecord)) {
+                                                    conditionRecords.Add(mainTableSelectRecord);
+                                                }
+                                            }
+                                        } else {
+                                            if (mainTableSelectRecord.getKeyValue(condition.name, selectTableStructure) == condition.value) {
+                                                if (conditionRecords.Contains(mainTableSelectRecord)) {
+                                                    conditionRecords.Add(mainTableSelectRecord);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Select without indexes
+                            }
+
+                            selectedRecords = selectedRecords.Union(conditionRecords).ToList();
+                        }
+
+                        foreach (Record selectedRecord in selectedRecords) {
+                            selectedData = new List<string>();
+
+                            foreach (string selectKey in sqlQuery.SELECT_PROJECTION) {
+                                if (selectTablePKs.Contains(selectKey)) {
+                                    selectedData.Add(selectedRecord.key);
+                                } else {
+                                    selectedData.Add(selectedRecord.getKeyValue(selectKey, selectTableStructure));
                                 }
                             }
-                        } else {
-                            // Select without indexes.
+
+                            if (selectedData.Count() > 0) {
+                                data.Add(string.Join("#", selectedData));
+                            }
                         }
 
                         if (data.Count() > 0) {
@@ -1150,7 +1164,12 @@ namespace Server {
                             if (selectMatches.Count() > 0) {
                                 string[] conditions = Regex.Split(selectMatches[0], " AND ", RegexOptions.IgnoreCase);
                                 foreach (string condition in conditions) {
-                                    string[] conditionArgs = condition.Split(" "); // Watch out for the conditions to be split by " ".
+                                    int firstSpace = condition.IndexOf(" "); // Watch out for the conditions to be split by " ".
+                                    string[] conditionArgs = {
+                                        condition.Substring(0, firstSpace),
+                                        condition.Substring(firstSpace + 1, 1),
+                                        condition.Substring(firstSpace + 3)
+                                    };
                                     switch (conditionArgs[1]) {
                                         case "=":
                                             whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.EQUAL, conditionArgs[2].Replace("\'", String.Empty)));
