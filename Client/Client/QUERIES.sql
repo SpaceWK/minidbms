@@ -6,7 +6,7 @@ USE students;
 CREATE TABLE disciplines (DiscID VARCHAR(5) PRIMARY KEY, DName VARCHAR(20), CreditNr INT);
 
 INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('DB1', 'Databases 1', 7);
-INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('DB', 'Data Structures', 6);
+INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('DS', 'Data Structures', 6);
 INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('CP', 'C Programming', 6);
 
 
@@ -20,6 +20,8 @@ INSERT INTO specialization (SpecID, SpecName, Language) VALUES ('I', 'Informatic
 CREATE TABLE groups (GroupID INT PRIMARY KEY, SpecID VARCHAR(20) REFERENCES specialization (SpecID));
 
 INSERT INTO groups (GroupID, SpecID) VALUES (531, 'I');
+INSERT INTO groups (GroupID, SpecID) VALUES (532, 'I');
+INSERT INTO groups (GroupID, SpecID) VALUES (631, 'MI'); # MI does not exist in 'specialization'
 
 
 # Students
@@ -38,8 +40,9 @@ INSERT INTO marks (StudID, DiscID, Mark) values (1, 'DS', 9);
 
 
 # Index
-CREATE INDEX idx_marks_StudID ON marks (StudID);
-CREATE INDEX idx_marks_StudIDMark ON marks (StudID,Mark);
+CREATE INDEX idx_marks_Mark ON marks (Mark);
+
+INSERT INTO marks (StudID, DiscID, Mark) values (1, 'CP', 10);
 
 
 # Delete
