@@ -248,6 +248,18 @@ namespace Server {
             return values;
         }
 
+        public static string getXmlTablePrimaryKey(string tableName) {
+            string pk = "";
+            List<string> tablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + tableName + "']/PrimaryKeys");
+            if (tablePKs.Count() > 1) {
+                pk = string.Concat(pk, string.Join("$", tablePKs));
+            } else {
+                pk = tablePKs[0];
+            }
+            
+            return pk;
+        }
+
         public static List<ForeignKey> getXmlTableForeignKeys(string tableName) {
             List<ForeignKey> foreignKeys = new List<ForeignKey>();
             List<string> tableFKs = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + tableName + "']/ForeignKeys", "name");
@@ -478,7 +490,7 @@ namespace Server {
                                     @"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexName='" + sqlQuery.CREATE_INDEX_NAME + "']/IndexAttributes"
                                 );
                             } else {
-                                send(new Message(MessageAction.ERROR, "Nu se poate creea index pe cheia primara '" + indexAttribute + "'."));
+                                send(new Message(MessageAction.ERROR, "Cheia '" + indexAttribute + "' este cheie primara in tabela '" + sqlQuery.CREATE_INDEX_TABLE_NAME + "'."));
                                 return;
                             }
                         }
@@ -516,7 +528,7 @@ namespace Server {
                         }
 
                         send(new Message(MessageAction.SUCCESS, "Index '" + sqlQuery.CREATE_INDEX_NAME + "' creat cu succes!"));
-                        break;
+                        return;
 
                     case SQLQueryType.DROP_DATABASE:
                         if (!xmlNodeExists(@"//Databases/Database[@databaseName='" + sqlQuery.DROP_DATABASE_NAME + "']")) {
@@ -533,7 +545,7 @@ namespace Server {
 
                         currentDatabase = null;
                         send(new Message(MessageAction.SUCCESS, "Baza de date '" + sqlQuery.DROP_DATABASE_NAME + "' stearsa cu succes!"));
-                        break;
+                        return;
 
                     case SQLQueryType.DROP_TABLE:
                         if (currentDatabase == null) {
@@ -591,7 +603,6 @@ namespace Server {
                         List<KeyValuePair<string, string>> insertForeignKeys = new List<KeyValuePair<string, string>>();
 
                         string insertPrimaryKey = "";
-                        List<string> insertValues = new List<string>();
 
                         List<string> insertPKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/PrimaryKeys");
                         List<string> insertUKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.INSERT_TABLE_NAME + "']/UniqueKeys");
@@ -601,25 +612,28 @@ namespace Server {
                         bool insertIDXCheck;
 
                         if (insertUKs.Count() > 0 || insertPKs.Count() > 0 || insertIndexes.Count() > 0 || insertFKs.Count() > 0) {
+                            List<string> insertPKValues = new List<string>();
+                            List<string> insertValues = new List<string>();
+
                             foreach (KeyValuePair<string, string> attribute in sqlQuery.INSERT_TABLE_ATTRIBUTES_VALUES) {
                                 if (insertPKs.Contains(attribute.Key)) {
-                                    insertPrimaryKey = string.Concat(insertPrimaryKey, attribute.Value);
-                                } else if (insertUKs.Contains(attribute.Key)) {
-                                    insertUniqueKeys.Add(attribute);
-                                } else if (insertIndexes.Contains(attribute.Key)) {
-                                    insertIndexKeys.Add(attribute);
+                                    insertPKValues.Add(attribute.Value);
                                 } else {
-                                    foreach (ForeignKey foreignKey in insertFKs) {
-                                        if (foreignKey.attribute == attribute.Key) {
-                                            insertForeignKeys.Add(attribute);
-                                        }
-                                    }
-                                }
-
-                                if (!insertPrimaryKey.Contains(attribute.Value)) {
                                     insertValues.Add(attribute.Value);
                                 }
+                                if (insertUKs.Contains(attribute.Key)) {
+                                    insertUniqueKeys.Add(attribute);
+                                }
+                                if (insertIndexes.Contains(attribute.Key)) {
+                                    insertIndexKeys.Add(attribute);
+                                }
+                                foreach (ForeignKey foreignKey in insertFKs) {
+                                    if (foreignKey.attribute == attribute.Key) {
+                                        insertForeignKeys.Add(attribute);
+                                    }
+                                }
                             }
+                            insertPrimaryKey = string.Concat(insertPrimaryKey, string.Join("$", insertPKValues));
 
                             foreach (KeyValuePair<string, string> attribute in insertUniqueKeys) {
                                 insertIDXCheck = insertDataIntoIdxCollection(
@@ -645,12 +659,13 @@ namespace Server {
                                 }
                             }
 
-                            bool checkReferenceTables = true;
+                            bool allGood = true;
                             foreach (ForeignKey foreignKey in insertFKs) {
                                 List<Record> referenceCollectionRecords = mongoDBService.getAll(currentDatabase, foreignKey.referencedTableName);
                                 if (referenceCollectionRecords.Count() > 0) {
+                                    int recordsFound = 0;
                                     foreach (Record referenceCollectionRecord in referenceCollectionRecords) {
-                                        foreach(KeyValuePair<string, string> attribute in insertForeignKeys) {
+                                        foreach (KeyValuePair<string, string> attribute in insertForeignKeys) {
                                             if (foreignKey.referencedTableKey == attribute.Key && referenceCollectionRecord.key == attribute.Value) {
                                                 insertIDXCheck = insertDataIntoIdxCollection(
                                                     "idx_" + sqlQuery.INSERT_TABLE_NAME + "_" + attribute.Key,
@@ -661,28 +676,33 @@ namespace Server {
                                                 if (insertIDXCheck == false) {
                                                     return;
                                                 }
-                                            } else {
-                                                checkReferenceTables = false;
-                                                send(new Message(MessageAction.ERROR, "Nu exista inregistrarea in '" + foreignKey.referencedTableName + "'!"));
-                                                return;
+
+                                                recordsFound++;
                                             }
                                         }
                                     }
-                                }
-                                else {
+
+                                    if (recordsFound == 0) {
+                                        allGood = false;
+                                        send(new Message(MessageAction.ERROR, "Nu exista inregistrarea in '" + foreignKey.referencedTableName + "'!"));
+                                        return;
+                                    }
+                                } else {
                                     send(new Message(MessageAction.ERROR, "Nu exista inregistrarea in '" + foreignKey.referencedTableName + "'!"));
                                     return;
                                 }
                             }
 
-                            if (checkReferenceTables == true) {
-                                string insertFinalValues = string.Join("#", insertValues);
+                            if (allGood) {
                                 mongoDBService.insert(
                                     currentDatabase,
                                     sqlQuery.INSERT_TABLE_NAME,
-                                    new Record(insertPrimaryKey, insertFinalValues)
+                                    new Record(insertPrimaryKey, string.Join("#", insertValues))
                                 );
                             }
+                        } else {
+                            send(new Message(MessageAction.ERROR, "A aparut o eroare la inserarea datelor in tabela '" + sqlQuery.INSERT_TABLE_NAME + "'!"));
+                            return;
                         }
 
                         send(new Message(MessageAction.SUCCESS, "Datele inserate cu succes in tabela '" + sqlQuery.INSERT_TABLE_NAME + "'!"));
