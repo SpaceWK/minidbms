@@ -144,6 +144,17 @@ namespace Server {
             return record;
         }
 
+        public void update(string dbName, string tableName, string key, string value) {
+            IMongoDatabase mongoDB = this.mongoClient.GetDatabase(dbName);
+            if (mongoDB != null) {
+                IMongoCollection<Record> mongoTable = mongoDB.GetCollection<Record>(tableName);
+                if (mongoTable != null) {
+                    var updated = Builders<Record>.Update.Set(record => record.value, value);
+                    mongoTable.UpdateOne(record => record.key == key, updated);
+                }
+            }
+        }
+
         public void removeByKey(string dbName, string tableName, string key) {
             IMongoDatabase mongoDB = this.mongoClient.GetDatabase(dbName);
             if (mongoDB != null) {
