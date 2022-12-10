@@ -284,22 +284,20 @@ namespace Server {
         }
 
         public static bool insertDataIntoIdxCollection(string collection, KeyValuePair<string, string> attribute, string pk, List<string> UKs) {
-            List<Record> records = mongoDBService.getAll(currentDatabase, collection);
+            List<Record> records = mongoDBService.getAllByKey(currentDatabase, collection, attribute.Value);
             if (records.Count() > 0) {
                 foreach (Record record in records) {
-                    if (record.key == attribute.Value) {
-                        if (UKs.Contains(attribute.Key)) {
-                            send(new Message(MessageAction.ERROR, "Cheia '" + attribute.Key + "' este cheie unica si exista deja valoarea '" + attribute.Value + "' in tabela '" + collection + "'."));
-                            return false;
-                        }
-
-                        mongoDBService.update(
-                            currentDatabase,
-                            collection,
-                            attribute.Value,
-                            string.Join("#", record.value, pk)
-                        );
+                    if (UKs.Contains(attribute.Key)) {
+                        send(new Message(MessageAction.ERROR, "Cheia '" + attribute.Key + "' este cheie unica si exista deja valoarea '" + attribute.Value + "' in tabela '" + collection + "'."));
+                        return false;
                     }
+
+                    mongoDBService.update(
+                        currentDatabase,
+                        collection,
+                        attribute.Value,
+                        string.Join("#", record.value, pk)
+                    );
                 }
             } else {
                 mongoDBService.insert(

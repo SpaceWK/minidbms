@@ -30,6 +30,7 @@ CREATE TABLE students (StudID INT PRIMARY KEY, GroupID INT REFERENCES groups (Gr
 INSERT INTO students (StudID, GroupID, StudName, Email) VALUES (1, 531, 'John Foreman', 'JohnForeman@email.com');
 INSERT INTO students (StudID, GroupID, StudName, Email) VALUES (2, 531, 'Ashley Cole', 'AshleyCole@email.com');
 INSERT INTO students (StudID, GroupID, StudName, Email) VALUES (3, 532, 'Nicolas Pitt', 'NicolasPitt@email.com');
+INSERT INTO students (StudID, GroupID, StudName, Email) VALUES (4, 532, 'John Doe', 'JohnDoe@email.com');
 
 
 # Marks
