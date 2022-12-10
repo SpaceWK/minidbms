@@ -29,7 +29,7 @@ CREATE TABLE students (StudID INT PRIMARY KEY, GroupID INT REFERENCES groups (Gr
 
 INSERT INTO students (StudID, GroupID, StudName, Email) VALUES (1, 531, 'John Foreman', 'JohnForeman@email.com');
 INSERT INTO students (StudID, GroupID, StudName, Email) VALUES (2, 531, 'Ashley Cole', 'AshleyCole@email.com');
-INSERT INTO students (StudID, GroupID, StudName, Email) VALUES (8, 532, 'Nicolas Pitt', 'NicolasPitt@email.com');
+INSERT INTO students (StudID, GroupID, StudName, Email) VALUES (3, 532, 'Nicolas Pitt', 'NicolasPitt@email.com');
 
 
 # Marks
@@ -42,14 +42,10 @@ INSERT INTO marks (StudID, DiscID, Mark) values (1, 'DS', 9);
 # Index
 CREATE INDEX idx_marks_Mark ON marks (Mark);
 
-INSERT INTO marks (StudID, DiscID, Mark) values (1, 'CP', 10);
+INSERT INTO marks (StudID, DiscID, Mark) values (1, 'CP', 10); # Should update marks IDX collections
 
 
 # Delete
-DELETE FROM marks WHERE StudID = 50 AND DiscID = 'OOP';
-DELETE FROM marks WHERE StudID = 49 AND DiscID = 'OOP';
-
-DELETE FROM students WHERE StudID = 50;
 DELETE FROM students WHERE GroupID = 531;
 
 

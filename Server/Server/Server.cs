@@ -717,6 +717,15 @@ namespace Server {
                             send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.DELETE_TABLE_NAME + "' nu exista."));
                             return;
                         }
+
+                        List<string> deleteIDXCollectionUKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/UniqueKeys");
+                        List<string> deleteIDXCollectionIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/IndexFiles");
+                        List<string> deleteIDXCollectionFKs = getXmlTableForeignKeys(sqlQuery.DELETE_TABLE_NAME).Select(fk => fk.referencedTableKey).ToList();
+                        List<string> merged = new List<string>();
+                        merged.AddRange(deleteIDXCollectionUKs);
+                        merged.AddRange(deleteIDXCollectionIDXs);
+                        merged.AddRange(deleteIDXCollectionFKs);
+
                         if (sqlQuery.DELETE_TABLE_CONDITIONS != null) {
                             List<string> deleteAllTableNames = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables", "tableName");
                             deleteAllTableNames.Remove(sqlQuery.DELETE_TABLE_NAME);
@@ -734,50 +743,55 @@ namespace Server {
                                 }
                             }
 
-                            string deletePrimaryKey = "";
-                            List<string> deletePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/PrimaryKeys");
-                            foreach (WhereCondition condition in sqlQuery.DELETE_TABLE_CONDITIONS) {
-                                if (deletePKs.Contains(condition.name)) {
-                                    deletePrimaryKey = string.Concat(deletePrimaryKey, condition.value);
-                                }
-                            }
-                            mongoDBService.removeByKey(
-                                currentDatabase,
-                                sqlQuery.DELETE_TABLE_NAME,
-                                deletePrimaryKey
-                            );
-
+                            List<string> mainTablePKsToDelete = new List<string>();
                             string indexTableName;
-                            List<string> deleteIDXCollectionUKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/UniqueKeys");
-                            List<string> deleteIDXCollectionIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/IndexFiles");
-                            List<string> merged = new List<string>();
-                            merged.AddRange(deleteIDXCollectionUKs);
-                            merged.AddRange(deleteIDXCollectionIDXs);
-                            foreach (string key in merged) {
-                                indexTableName = "idx_" + sqlQuery.DELETE_TABLE_NAME + "_" + key;
-                                if (mongoDBService.existsCollection(currentDatabase, indexTableName)) {
-                                    foreach (WhereCondition condition in sqlQuery.DELETE_TABLE_CONDITIONS) {
-                                        mongoDBService.removeAllByValue(
-                                            currentDatabase,
-                                            indexTableName,
-                                            condition.value
-                                        );
+                            foreach (WhereCondition condition in sqlQuery.DELETE_TABLE_CONDITIONS) {
+                                foreach (string key in merged) {
+                                    if (key == condition.name) {
+                                        indexTableName = "idx_" + sqlQuery.DELETE_TABLE_NAME + "_" + key;
+                                        if (mongoDBService.existsCollection(currentDatabase, indexTableName)) {
+                                            List<Record> idxRecords = mongoDBService.getAllByKey(currentDatabase, indexTableName, condition.value);
+                                            if (idxRecords.Count() > 0) {
+                                                foreach (Record record in idxRecords) {
+                                                    string[] splitted = record.value.Split("#");
+                                                    foreach (string item in splitted) {
+                                                        mainTablePKsToDelete.Add(item);
+                                                    }
+                                                }
+
+                                                mongoDBService.removeByKey(
+                                                    currentDatabase,
+                                                    indexTableName,
+                                                    condition.value
+                                                );
+                                            } else {
+                                                mainTablePKsToDelete.Clear();
+                                                send(new Message(MessageAction.ERROR, "Nu exista inregistrari cu valoarea '" + condition.value + "'."));
+                                                return;
+                                            }
+                                        } else {
+                                            mainTablePKsToDelete.Add(condition.value);
+                                        }
                                     }
                                 }
+                            }
+
+                            if (mainTablePKsToDelete.Count() > 0) {
+                                foreach (string pk in mainTablePKsToDelete) {
+                                    mongoDBService.removeByKey(
+                                        currentDatabase,
+                                        sqlQuery.DELETE_TABLE_NAME,
+                                        pk
+                                    );
+                                }
+                            } else {
+                                send(new Message(MessageAction.ERROR, "Datele nu au fost sterse din tabela '" + sqlQuery.DELETE_TABLE_NAME + "'."));
+                                return;
                             }
                         } else {
                             string indexTableName;
-                            List<string> deleteNoCondUKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/UniqueKeys");
-                            foreach (string uniqueKey in deleteNoCondUKs) {
-                                indexTableName = "idx_" + sqlQuery.DELETE_TABLE_NAME + "_" + uniqueKey;
-                                if (mongoDBService.existsCollection(currentDatabase, indexTableName)) {
-                                    mongoDBService.clearCollection(currentDatabase, indexTableName);
-                                    }
-                                }
-
-                            List<string> deleteNoCondIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.DELETE_TABLE_NAME + "']/IndexFiles");
-                            foreach (string indexAttribute in deleteNoCondIDXs) {
-                                indexTableName = "idx_" + sqlQuery.DELETE_TABLE_NAME + "_" + indexAttribute;
+                            foreach (string key in merged) {
+                                indexTableName = "idx_" + sqlQuery.DELETE_TABLE_NAME + "_" + key;
                                 if (mongoDBService.existsCollection(currentDatabase, indexTableName)) {
                                     mongoDBService.clearCollection(currentDatabase, indexTableName);
                                 }
