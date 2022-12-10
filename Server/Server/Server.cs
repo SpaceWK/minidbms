@@ -744,7 +744,6 @@ namespace Server {
                             }
 
                             List<string> mainTablePKsToDelete = new List<string>();
-
                             string indexTableName;
                             foreach (WhereCondition condition in sqlQuery.DELETE_TABLE_CONDITIONS) {
                                 foreach (string key in merged) {
@@ -752,31 +751,42 @@ namespace Server {
                                         indexTableName = "idx_" + sqlQuery.DELETE_TABLE_NAME + "_" + key;
                                         if (mongoDBService.existsCollection(currentDatabase, indexTableName)) {
                                             List<Record> idxRecords = mongoDBService.getAllByKey(currentDatabase, indexTableName, condition.value);
-                                            foreach (Record record in idxRecords) {
-                                                string[] splitted = record.value.Split("#");
-                                                foreach (string item in splitted) {
-                                                    mainTablePKsToDelete.Add(item);
+                                            if (idxRecords.Count() > 0) {
+                                                foreach (Record record in idxRecords) {
+                                                    string[] splitted = record.value.Split("#");
+                                                    foreach (string item in splitted) {
+                                                        mainTablePKsToDelete.Add(item);
+                                                    }
                                                 }
-                                            }
 
-                                            mongoDBService.removeByKey(
-                                                currentDatabase,
-                                                indexTableName,
-                                                condition.value
-                                            );
+                                                mongoDBService.removeByKey(
+                                                    currentDatabase,
+                                                    indexTableName,
+                                                    condition.value
+                                                );
+                                            } else {
+                                                mainTablePKsToDelete.Clear();
+                                                send(new Message(MessageAction.ERROR, "Nu exista inregistrari cu valoarea '" + condition.value + "'."));
+                                                return;
+                                            }
                                         } else {
-                                            // Delete should only work with PKs, but above is a partial implementation to also work with indexes.
+                                            mainTablePKsToDelete.Add(condition.value);
                                         }
                                     }
                                 }
                             }
 
-                            foreach (string pk in mainTablePKsToDelete) {
-                                mongoDBService.removeByKey(
-                                    currentDatabase,
-                                    sqlQuery.DELETE_TABLE_NAME,
-                                    pk
-                                );
+                            if (mainTablePKsToDelete.Count() > 0) {
+                                foreach (string pk in mainTablePKsToDelete) {
+                                    mongoDBService.removeByKey(
+                                        currentDatabase,
+                                        sqlQuery.DELETE_TABLE_NAME,
+                                        pk
+                                    );
+                                }
+                            } else {
+                                send(new Message(MessageAction.ERROR, "Datele nu au fost sterse din tabela '" + sqlQuery.DELETE_TABLE_NAME + "'."));
+                                return;
                             }
                         } else {
                             string indexTableName;
