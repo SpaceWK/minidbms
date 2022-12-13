@@ -906,13 +906,18 @@ namespace Server {
                         List<Record> conditionRecords = new List<Record>();
 
                         List<string> selectIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/IndexFiles");
+                        List<string> selectUKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/UniqueKeys");
+                        List<string> selectFKs = getXmlTableForeignKeys(sqlQuery.SELECT_TABLE_NAME).Select(fk => fk.referencedTableKey).ToList();
+                        List<string> selectFinal = selectIDXs.Concat(selectUKs).Concat(selectFKs).ToList();
                         foreach (WhereCondition condition in sqlQuery.SELECT_SELECTION) {
-                            if (selectIDXs.Count() > 0) {
-                                if (selectIDXs.Contains(condition.name)) {
-                                    bool isNumeric = int.TryParse(condition.value, out int intConditionValue);
-                                    if (!isNumeric) {
-                                        send(new Message(MessageAction.ERROR, "Operatorii '>' si '<' se folosesc numai cu valori numerice."));
-                                        return;
+                            if (selectFinal.Count() > 0) {
+                                if (selectFinal.Contains(condition.name)) {
+                                    if (condition.comparison == ComparisonOperator.LESS_THAN || condition.comparison == ComparisonOperator.GREATER_THAN) {
+                                        bool isNumeric = int.TryParse(condition.value, out int intConditionValue);
+                                        if (!isNumeric) {
+                                            send(new Message(MessageAction.ERROR, "Operatorii '>' si '<' se folosesc numai cu valori numerice."));
+                                            return;
+                                        }
                                     }
 
                                     string idxSelectTableName = "idx_" + sqlQuery.SELECT_TABLE_NAME + "_" + condition.name;
@@ -920,33 +925,57 @@ namespace Server {
                                         List<Record> idxSelectRecords = mongoDBService.getAllByKeyWithCondition(currentDatabase, idxSelectTableName, condition);
 
                                         foreach (Record idxSelectRecord in idxSelectRecords) {
-                                            List<Record> mainTableSelectRecords = mongoDBService.getAllByKey(currentDatabase, sqlQuery.SELECT_TABLE_NAME, idxSelectRecord.value);
-                                            conditionRecords = conditionRecords.Union(mainTableSelectRecords).ToList();
+                                            string[] splitted = idxSelectRecord.value.Split("#");
+                                            foreach (string item in splitted) {
+                                                List<Record> mainTableSelectRecords = mongoDBService.getAllByKey(currentDatabase, sqlQuery.SELECT_TABLE_NAME, item);
+                                                conditionRecords = conditionRecords.Concat(mainTableSelectRecords).ToList();
+                                            }
                                         }
                                     }
                                 } else {
                                     List<Record> mainTableSelectRecords = mongoDBService.getAll(currentDatabase, sqlQuery.SELECT_TABLE_NAME);
                                     foreach (Record mainTableSelectRecord in mainTableSelectRecords) {
                                         if (selectTablePKs.Contains(condition.name)) {
-                                            if (mainTableSelectRecord.key == condition.value) {
-                                                if (conditionRecords.Contains(mainTableSelectRecord)) {
-                                                    conditionRecords.Add(mainTableSelectRecord);
-                                                }
+                                            if (
+                                                mainTableSelectRecord.key == condition.value &&
+                                                conditionRecords.FindIndex(item => item.key == condition.value) == -1
+                                            ) {
+                                                conditionRecords.Add(mainTableSelectRecord);
                                             }
                                         } else {
-                                            if (mainTableSelectRecord.getKeyValue(condition.name, selectTableStructure) == condition.value) {
-                                                if (conditionRecords.Contains(mainTableSelectRecord)) {
-                                                    conditionRecords.Add(mainTableSelectRecord);
-                                                }
+                                            string value = mainTableSelectRecord.getKeyValue(condition.name, selectTableStructure);
+                                            if (
+                                                value == condition.value &&
+                                                conditionRecords.FindIndex(item => item.getKeyValue(condition.name, selectTableStructure) == condition.value) == -1
+                                            ) {
+                                                conditionRecords.Add(mainTableSelectRecord);
                                             }
                                         }
                                     }
                                 }
                             } else {
-                                // Select without indexes
+                                List<Record> mainTableSelectRecords = mongoDBService.getAll(currentDatabase, sqlQuery.SELECT_TABLE_NAME);
+                                foreach (Record mainTableSelectRecord in mainTableSelectRecords) {
+                                    if (selectTablePKs.Contains(condition.name)) {
+                                        if (
+                                            mainTableSelectRecord.key == condition.value &&
+                                            conditionRecords.FindIndex(item => item.key == condition.value) == -1
+                                        ) {
+                                            conditionRecords.Add(mainTableSelectRecord);
+                                        }
+                                    } else {
+                                        string value = mainTableSelectRecord.getKeyValue(condition.name, selectTableStructure);
+                                        if (
+                                            value == condition.value &&
+                                            conditionRecords.FindIndex(item => item.getKeyValue(condition.name, selectTableStructure) == condition.value) == -1
+                                        ) {
+                                            conditionRecords.Add(mainTableSelectRecord);
+                                        }
+                                    }
+                                }
                             }
 
-                            selectedRecords = selectedRecords.Union(conditionRecords).ToList();
+                            selectedRecords = selectedRecords.Concat(conditionRecords).ToList();
                         }
 
                         foreach (Record selectedRecord in selectedRecords) {
@@ -1179,7 +1208,7 @@ namespace Server {
                                             break;
                                         case ">":
                                             whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_THAN, conditionArgs[2].Replace("\'", String.Empty)));
-                                            break; ;
+                                            break;
                                         default:
                                             break;
                                     }

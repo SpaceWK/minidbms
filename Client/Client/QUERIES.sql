@@ -59,8 +59,7 @@ SELECT DName, CreditNr FROM disciplines WHERE CreditNr = 6;
 SELECT DiscID, DName FROM disciplines WHERE CreditNr > 1;
 SELECT CreditNr FROM disciplines WHERE CreditNr > 1 AND DName = 'Databases 1';
 
-SELECT Mark FROM marks WHERE StudID = 50 AND DiscID = 'OS';
-SELECT StudID, Mark FROM marks;
+SELECT Mark FROM marks WHERE DiscID = 'DB1';
 
 
 DROP TABLE marks;
