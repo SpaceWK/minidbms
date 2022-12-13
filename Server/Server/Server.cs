@@ -236,7 +236,7 @@ namespace Server {
         public static List<string> getXmlNodeChildrenAttributeValues(string nodeNamePath, string attributeName) {
             catalog.Load("../../../Catalog.xml");
 
-            List <string> values = new List<string>();
+            List<string> values = new List<string>();
             XmlNode parent = catalog.SelectSingleNode(nodeNamePath);
             if (parent != null) {
                 XmlNodeList children = parent.ChildNodes;
@@ -256,7 +256,7 @@ namespace Server {
             } else {
                 pk = tablePKs[0];
             }
-            
+
             return pk;
         }
 
@@ -269,7 +269,7 @@ namespace Server {
 
                 foreignKeys.Add(new ForeignKey(fkAttributeName, fkReferencedTableAndKey[0], fkReferencedTableAndKey[1]));
             }
-            
+
             return foreignKeys;
         }
 
@@ -502,7 +502,7 @@ namespace Server {
                         List<Record> records = mongoDBService.getAll(currentDatabase, sqlQuery.CREATE_INDEX_TABLE_NAME);
                         if (records.Count() > 0) {
                             List<string> createIndexIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/IndexFiles/IndexFile[@indexName='" + sqlQuery.CREATE_INDEX_NAME + "']/IndexAttributes");
-                            
+
                             if (createIndexIDXs.Count() > 0) {
                                 List<string> createIndexAttributes = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.CREATE_INDEX_TABLE_NAME + "']/Structure", "name");
                                 createIndexAttributes.RemoveAll(name => createIndexPKs.Contains(name));
@@ -596,7 +596,7 @@ namespace Server {
                             return;
                         }
 
-                        List<KeyValuePair<string,string>> insertUniqueKeys = new List<KeyValuePair<string, string>>();
+                        List<KeyValuePair<string, string>> insertUniqueKeys = new List<KeyValuePair<string, string>>();
                         List<KeyValuePair<string, string>> insertIndexKeys = new List<KeyValuePair<string, string>>();
                         List<KeyValuePair<string, string>> insertForeignKeys = new List<KeyValuePair<string, string>>();
 
@@ -705,7 +705,7 @@ namespace Server {
 
                         send(new Message(MessageAction.SUCCESS, "Datele inserate cu succes in tabela '" + sqlQuery.INSERT_TABLE_NAME + "'!"));
                         return;
-                        
+
                     case SQLQueryType.DELETE:
                         if (currentDatabase == null) {
                             send(new Message(MessageAction.ERROR, "Nicio baza de date selectata."));
@@ -811,47 +811,66 @@ namespace Server {
                             return;
                         }
 
-                        List<string> selectTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/PrimaryKeys");
-                        List<string> selectTableStructure = getXmlTableStructure(sqlQuery.SELECT_TABLE_NAME, true);
+                        if (sqlQuery.SELECT_PROJECTION != null) {
+                            if (sqlQuery.SELECT_PROJECTION.Count() > 1 && sqlQuery.SELECT_PROJECTION[0] != "*") {
+                                List<string> selectAttributes = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/Structure", "name");
+                                bool verifyProjection = false;
+                                bool verifySelection = false;
 
-                        List<string> selectAttributes = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/Structure", "name");
-                        bool verifyProjection = false;
-                        bool verifySelection = false;
+                                foreach (string projection in sqlQuery.SELECT_PROJECTION) {
+                                    foreach (string attribute in selectAttributes) {
+                                        if (projection == attribute) {
+                                            verifyProjection = true;
+                                        }
+                                    }
+                                    if (verifyProjection == false) {
+                                        send(new Message(MessageAction.ERROR, "Nu exista cheia in tabela '" + sqlQuery.SELECT_TABLE_NAME));
+                                        return;
+                                    }
+                                    verifyProjection = false;
+                                }
 
-                        foreach (string projection in sqlQuery.SELECT_PROJECTION) {
-                            foreach (string attribute in selectAttributes) {
-                                if (projection == attribute) {
-                                    verifyProjection = true;
+                                if (sqlQuery.SELECT_SELECTION != null) {
+                                    foreach (WhereCondition selection in sqlQuery.SELECT_SELECTION) {
+                                        foreach (string attribute in selectAttributes) {
+                                            if (selection.name == attribute) {
+                                                verifySelection = true;
+                                            }
+                                        }
+                                        if (verifySelection == false) {
+                                            send(new Message(MessageAction.ERROR, "Nu exista cheia in tabela '" + sqlQuery.SELECT_TABLE_NAME));
+                                            return;
+                                        }
+                                        verifySelection = false;
+                                    }
                                 }
                             }
-                            if (verifyProjection == false) {
-                                send(new Message(MessageAction.ERROR, "Nu exista cheia in tabela '" + sqlQuery.SELECT_TABLE_NAME));
-                                return;
-                            }
-                            verifyProjection = false;
-                        }
-
-                        foreach (WhereCondition selection in sqlQuery.SELECT_SELECTION) {
-                            foreach (string attribute in selectAttributes) {
-                                if (selection.name == attribute) {
-                                    verifySelection = true;
-                                }
-                            }
-                            if (verifySelection == false) {
-                                send(new Message(MessageAction.ERROR, "Nu exista cheia in tabela '" + sqlQuery.SELECT_TABLE_NAME));
-                                return;
-                            }
-                            verifySelection = false;
+                        } else {
+                            send(new Message(MessageAction.ERROR, "Va rugam sa specificati campurile tabelei sau '*' pentru selectie totala."));
+                            return;
                         }
 
                         // TODO: Check for the projection & selection (where conditions) fields to exist in the table structure.
 
+                        List<string> selectTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/PrimaryKeys");
+                        List<string> selectTableStructure = getXmlTableStructure(sqlQuery.SELECT_TABLE_NAME);
+
+                        List<string> selectProjection;
+                        if (sqlQuery.SELECT_PROJECTION.Count() == 1 && sqlQuery.SELECT_PROJECTION[0] == "*") {
+                            selectProjection = selectTableStructure;
+                        } else {
+                            selectProjection = sqlQuery.SELECT_PROJECTION;
+                        }
+
                         string message = "";
-                        message += string.Join(",", sqlQuery.SELECT_PROJECTION);
+                        message += string.Join(",", selectProjection);
                         message += ":";
 
                         List<string> data = new List<string>();
                         List<string> selectedData;
+
+
+                        selectTableStructure = getXmlTableStructure(sqlQuery.SELECT_TABLE_NAME, true);
 
                         // No conditions
                         if (sqlQuery.SELECT_SELECTION == null) {
@@ -859,12 +878,12 @@ namespace Server {
                             foreach (Record selectRecord in selectRecords) {
                                 selectedData = new List<string>();
 
-                                foreach (string selectKey in sqlQuery.SELECT_PROJECTION) {
+                                foreach (string selectKey in selectProjection) {
                                     if (selectTablePKs.Contains(selectKey)) {
                                         selectedData.Add(selectRecord.key);
                                     } else {
                                         selectedData.Add(selectRecord.getKeyValue(selectKey, selectTableStructure));
-                                    } 
+                                    }
                                 }
 
                                 if (selectedData.Count() > 0) {
@@ -887,13 +906,18 @@ namespace Server {
                         List<Record> conditionRecords = new List<Record>();
 
                         List<string> selectIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/IndexFiles");
+                        List<string> selectUKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/UniqueKeys");
+                        List<string> selectFKs = getXmlTableForeignKeys(sqlQuery.SELECT_TABLE_NAME).Select(fk => fk.referencedTableKey).ToList();
+                        List<string> selectFinal = selectIDXs.Concat(selectUKs).Concat(selectFKs).ToList();
                         foreach (WhereCondition condition in sqlQuery.SELECT_SELECTION) {
-                            if (selectIDXs.Count() > 0) {
-                                if (selectIDXs.Contains(condition.name)) {
-                                    bool isNumeric = int.TryParse(condition.value, out int intConditionValue);
-                                    if (!isNumeric) {
-                                        send(new Message(MessageAction.ERROR, "Operatorii '>' si '<' se folosesc numai cu valori numerice."));
-                                        return;
+                            if (selectFinal.Count() > 0) {
+                                if (selectFinal.Contains(condition.name)) {
+                                    if (condition.comparison == ComparisonOperator.LESS_THAN || condition.comparison == ComparisonOperator.GREATER_THAN) {
+                                        bool isNumeric = int.TryParse(condition.value, out int intConditionValue);
+                                        if (!isNumeric) {
+                                            send(new Message(MessageAction.ERROR, "Operatorii '>' si '<' se folosesc numai cu valori numerice."));
+                                            return;
+                                        }
                                     }
 
                                     string idxSelectTableName = "idx_" + sqlQuery.SELECT_TABLE_NAME + "_" + condition.name;
@@ -901,39 +925,63 @@ namespace Server {
                                         List<Record> idxSelectRecords = mongoDBService.getAllByKeyWithCondition(currentDatabase, idxSelectTableName, condition);
 
                                         foreach (Record idxSelectRecord in idxSelectRecords) {
-                                            List<Record> mainTableSelectRecords = mongoDBService.getAllByKey(currentDatabase, sqlQuery.SELECT_TABLE_NAME, idxSelectRecord.value);
-                                            conditionRecords = conditionRecords.Union(mainTableSelectRecords).ToList();
+                                            string[] splitted = idxSelectRecord.value.Split("#");
+                                            foreach (string item in splitted) {
+                                                List<Record> mainTableSelectRecords = mongoDBService.getAllByKey(currentDatabase, sqlQuery.SELECT_TABLE_NAME, item);
+                                                conditionRecords = conditionRecords.Concat(mainTableSelectRecords).ToList();
+                                            }
                                         }
                                     }
                                 } else {
                                     List<Record> mainTableSelectRecords = mongoDBService.getAll(currentDatabase, sqlQuery.SELECT_TABLE_NAME);
                                     foreach (Record mainTableSelectRecord in mainTableSelectRecords) {
                                         if (selectTablePKs.Contains(condition.name)) {
-                                            if (mainTableSelectRecord.key == condition.value) {
-                                                if (conditionRecords.Contains(mainTableSelectRecord)) {
-                                                    conditionRecords.Add(mainTableSelectRecord);
-                                                }
+                                            if (
+                                                mainTableSelectRecord.key == condition.value &&
+                                                conditionRecords.FindIndex(item => item.key == condition.value) == -1
+                                            ) {
+                                                conditionRecords.Add(mainTableSelectRecord);
                                             }
                                         } else {
-                                            if (mainTableSelectRecord.getKeyValue(condition.name, selectTableStructure) == condition.value) {
-                                                if (conditionRecords.Contains(mainTableSelectRecord)) {
-                                                    conditionRecords.Add(mainTableSelectRecord);
-                                                }
+                                            string value = mainTableSelectRecord.getKeyValue(condition.name, selectTableStructure);
+                                            if (
+                                                value == condition.value &&
+                                                conditionRecords.FindIndex(item => item.getKeyValue(condition.name, selectTableStructure) == condition.value) == -1
+                                            ) {
+                                                conditionRecords.Add(mainTableSelectRecord);
                                             }
                                         }
                                     }
                                 }
                             } else {
-                                // Select without indexes
+                                List<Record> mainTableSelectRecords = mongoDBService.getAll(currentDatabase, sqlQuery.SELECT_TABLE_NAME);
+                                foreach (Record mainTableSelectRecord in mainTableSelectRecords) {
+                                    if (selectTablePKs.Contains(condition.name)) {
+                                        if (
+                                            mainTableSelectRecord.key == condition.value &&
+                                            conditionRecords.FindIndex(item => item.key == condition.value) == -1
+                                        ) {
+                                            conditionRecords.Add(mainTableSelectRecord);
+                                        }
+                                    } else {
+                                        string value = mainTableSelectRecord.getKeyValue(condition.name, selectTableStructure);
+                                        if (
+                                            value == condition.value &&
+                                            conditionRecords.FindIndex(item => item.getKeyValue(condition.name, selectTableStructure) == condition.value) == -1
+                                        ) {
+                                            conditionRecords.Add(mainTableSelectRecord);
+                                        }
+                                    }
+                                }
                             }
 
-                            selectedRecords = selectedRecords.Union(conditionRecords).ToList();
+                            selectedRecords = selectedRecords.Concat(conditionRecords).ToList();
                         }
 
                         foreach (Record selectedRecord in selectedRecords) {
                             selectedData = new List<string>();
 
-                            foreach (string selectKey in sqlQuery.SELECT_PROJECTION) {
+                            foreach (string selectKey in selectProjection) {
                                 if (selectTablePKs.Contains(selectKey)) {
                                     selectedData.Add(selectedRecord.key);
                                 } else {
@@ -1024,7 +1072,7 @@ namespace Server {
                                     int end = attributeArgs[2].IndexOf(")", start);
                                     string str = attributeArgs[2].Substring(start, end - start);
                                     string[] keys = str.Split(",", StringSplitOptions.TrimEntries);
-                                    
+
                                     foreach (TableAttribute attribute in tableAttributes) {
                                         if (keys.Contains(attribute.name)) {
                                             attribute.isPrimaryKey = true;
@@ -1038,7 +1086,7 @@ namespace Server {
                                         int start = attributeArgs[4].IndexOf("(") + 1;
                                         int end = attributeArgs[4].IndexOf(")", start);
                                         string key = attributeArgs[4].Substring(start, end - start);
-                                        
+
                                         tableAttributes.Add(new TableAttribute(
                                             attributeArgs[0],
                                             attributeTypeLength.Key,
@@ -1046,7 +1094,7 @@ namespace Server {
                                             item.Contains("NOT NULL", StringComparison.OrdinalIgnoreCase) ? false : true,
                                             item.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) ? true : false,
                                             false,
-                                            true, 
+                                            true,
                                             attributeArgs[3],
                                             key
                                         ));
@@ -1124,7 +1172,7 @@ namespace Server {
                     if (args[1].Contains("INTO", StringComparison.OrdinalIgnoreCase)) {
                         pattern = @"(?<=\()(.*?)(?=\))";
                         matches = Regex.Matches(statement, pattern).Cast<Match>().Select(match => match.Value).ToList();
-                       
+
                         List<KeyValuePair<string, string>> attributesValues = new List<KeyValuePair<string, string>>();
                         string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries);
                         string[] values = matches[1].Split(",", StringSplitOptions.TrimEntries);
@@ -1160,7 +1208,7 @@ namespace Server {
                                             break;
                                         case ">":
                                             whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_THAN, conditionArgs[2].Replace("\'", String.Empty)));
-                                            break;;
+                                            break;
                                         default:
                                             break;
                                     }
