@@ -1239,67 +1239,110 @@ namespace Server {
                     string selectReplacedStatement = Regex.Replace(statement, pattern, "%");
                     string[] selectReplacedArgs = selectReplacedStatement.Split(" ");
 
-                    if (selectReplacedStatement.Contains("FROM", StringComparison.OrdinalIgnoreCase)) {
-                        if (matches.Count() > 0) {
-                            List<string> projection = new List<string>();
-                            bool isDistinctSelect = false;
+                    switch (selectReplacedArgs[4].ToLower()) {
+                        case "where":
+                            if (selectReplacedStatement.Contains("FROM", StringComparison.OrdinalIgnoreCase)) {
+                                if (matches.Count() > 0) {
+                                    List<string> projection = new List<string>();
+                                    bool isDistinctSelect = false;
 
-                            if (matches[0].Contains("DISTINCT", StringComparison.OrdinalIgnoreCase)) {
-                                string distinctPattern = "(?<=DISTINCT )(.*)(?= FROM)";
-                                matches = Regex.Matches(statement, distinctPattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
-                                string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries); // Watch out for the attributes to be split by ",".
-                                foreach (string attribute in attributes) {
-                                    projection.Add(attribute);
-                                }
+                                    if (matches[0].Contains("DISTINCT", StringComparison.OrdinalIgnoreCase)) {
+                                        string distinctPattern = "(?<=DISTINCT )(.*)(?= FROM)";
+                                        matches = Regex.Matches(statement, distinctPattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
+                                        string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries); // Watch out for the attributes to be split by ",".
+                                        foreach (string attribute in attributes) {
+                                            projection.Add(attribute);
+                                        }
 
-                                isDistinctSelect = true;
-                            } else {
-                                string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries); // Watch out for the attributes to be split by ",".
-                                foreach (string attribute in attributes) {
-                                    projection.Add(attribute);
-                                }
-                            }
+                                        isDistinctSelect = true;
+                                    } else {
+                                        string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries); // Watch out for the attributes to be split by ",".
+                                        foreach (string attribute in attributes) {
+                                            projection.Add(attribute);
+                                        }
+                                    }
 
-                            string selectPattern = @"(?<=WHERE ).*";
-                            List<string> selectMatches = Regex.Matches(selectReplacedStatement, selectPattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
-                            List<WhereCondition> whereConditions = new List<WhereCondition>();
-                            if (selectMatches.Count() > 0) {
-                                string[] conditions = Regex.Split(selectMatches[0], " AND ", RegexOptions.IgnoreCase);
-                                foreach (string condition in conditions) {
-                                    int firstSpace = condition.IndexOf(" "); // Watch out for the conditions to be split by " ".
-                                    string[] conditionArgs = {
+                                    string selectPattern = @"(?<=WHERE ).*";
+                                    List<string> selectMatches = Regex.Matches(selectReplacedStatement, selectPattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
+                                    List<WhereCondition> whereConditions = new List<WhereCondition>();
+                                    if (selectMatches.Count() > 0) {
+                                        string[] conditions = Regex.Split(selectMatches[0], " AND ", RegexOptions.IgnoreCase);
+                                        foreach (string condition in conditions) {
+                                            int firstSpace = condition.IndexOf(" "); // Watch out for the conditions to be split by " ".
+                                            string[] conditionArgs = {
                                         condition.Substring(0, firstSpace),
                                         condition.Substring(firstSpace + 1, 1),
                                         condition.Substring(firstSpace + 3)
                                     };
-                                    switch (conditionArgs[1]) {
-                                        case "=":
-                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.EQUAL, conditionArgs[2].Replace("\'", String.Empty)));
-                                            break;
-                                        case "<":
-                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.LESS_THAN, conditionArgs[2].Replace("\'", String.Empty)));
-                                            break;
-                                        case ">":
-                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_THAN, conditionArgs[2].Replace("\'", String.Empty)));
-                                            break;
-                                        default:
-                                            break;
+                                            switch (conditionArgs[1]) {
+                                                case "=":
+                                                    whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.EQUAL, conditionArgs[2].Replace("\'", String.Empty)));
+                                                    break;
+                                                case "<":
+                                                    whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.LESS_THAN, conditionArgs[2].Replace("\'", String.Empty)));
+                                                    break;
+                                                case ">":
+                                                    whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_THAN, conditionArgs[2].Replace("\'", String.Empty)));
+                                                    break;
+                                                default:
+                                                    break;
+                                            }
+                                        }
                                     }
-                                }
-                            }
 
-                            sqlQuery = new SQLQuery(SQLQueryType.SELECT);
-                            sqlQuery.SELECT_PROJECTION = projection;
-                            sqlQuery.SELECT_TABLE_NAME = selectReplacedArgs[3];
-                            sqlQuery.SELECT_DISTINCT = isDistinctSelect;
-                            sqlQuery.SELECT_SELECTION = whereConditions.Count() > 0 ? whereConditions : null;
-                        } else {
+                                    sqlQuery = new SQLQuery(SQLQueryType.SELECT);
+                                    sqlQuery.SELECT_PROJECTION = projection;
+                                    sqlQuery.SELECT_TABLE_NAME = selectReplacedArgs[3];
+                                    sqlQuery.SELECT_DISTINCT = isDistinctSelect;
+                                    sqlQuery.SELECT_SELECTION = whereConditions.Count() > 0 ? whereConditions : null;
+                                } else {
+                                    sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                                    sqlQuery.error = "SQL query invalid.";
+                                }
+                            } else {
+                                sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                                sqlQuery.error = "SQL query invalid.";
+                            }
+                            break;
+
+                        case "inner":
+                            if (selectReplacedStatement.Contains("FROM", StringComparison.OrdinalIgnoreCase)) {
+                                if (matches.Count() > 0) {
+                                    List<KeyValuePair<string,string>> projection = new List<KeyValuePair<string, string>>();
+
+                                    string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries); // Watch out for the attributes to be split by ",".
+                                    foreach (string attribute in attributes) {
+                                        string[] words = attribute.Split('.');
+                                        projection.Add(new KeyValuePair<string, string>(words[0], words[1]));
+                                    }
+
+                                    string[] first = selectReplacedArgs[8].Split('.');
+                                    string[] second = selectReplacedArgs[10].Split('.');
+                                    KeyValuePair<string, string> firstSelection = new KeyValuePair<string, string>(first[0], first[1]);
+                                    KeyValuePair<string, string> secondSelection = new KeyValuePair<string, string>(second[0], second[1]);
+
+                                    sqlQuery = new SQLQuery(SQLQueryType.SELECT);
+                                    sqlQuery.SELECT_JOIN_PROJECTION = projection;
+                                    sqlQuery.SELECT_JOIN_FIRST_TABLE = selectReplacedArgs[3];
+                                    sqlQuery.SELECT_JOIN_SECOND_TABLE = selectReplacedArgs[6];
+                                    sqlQuery.SELECT_JOIN_FIRST_SELECTION = firstSelection;
+                                    sqlQuery.SELECT_JOIN_SECOND_SELECTION = secondSelection;
+
+                                } else {
+                                    sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                                    sqlQuery.error = "SQL query invalid.";
+                                }
+                            } else {
+                                sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                                sqlQuery.error = "SQL query invalid.";
+                            }
+                            break;
+
+                        default:
                             sqlQuery = new SQLQuery(SQLQueryType.ERROR);
                             sqlQuery.error = "SQL query invalid.";
-                        }
-                    } else {
-                        sqlQuery = new SQLQuery(SQLQueryType.ERROR);
-                        sqlQuery.error = "SQL query invalid.";
+
+                            break;
                     }
                     break;
 

@@ -61,6 +61,12 @@ namespace Server {
         public string? SELECT_TABLE_NAME; // table
         public List<WhereCondition>? SELECT_SELECTION; // WHERE a = 1
 
+        // SELECT table.a, table.b, table.c FROM table INNER JOIN table ON tableX.id = tableY.id;
+        public List<KeyValuePair<string,string>>? SELECT_JOIN_PROJECTION;
+        public string? SELECT_JOIN_FIRST_TABLE;
+        public string? SELECT_JOIN_SECOND_TABLE;
+        public KeyValuePair<string, string>? SELECT_JOIN_FIRST_SELECTION;
+        public KeyValuePair<string, string>? SELECT_JOIN_SECOND_SELECTION;
 
         public SQLQuery(SQLQueryType type) {
             this.type = type;
