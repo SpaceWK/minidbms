@@ -310,6 +310,47 @@ namespace Server {
             return true;
         }
 
+        public static void verifyIfTheQueryAttributesExistInXml(List<string> projection, string table, List<string> selection) {
+            if (projection != null) {
+                if (projection.Count() > 1 && projection[0] != "*") {
+                    List<string> selectAttributes = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + table + "']/Structure", "name");
+                    bool verifyProjection = false;
+                    bool verifySelection = false;
+
+                    foreach (string proj in projection) {
+                        foreach (string attribute in selectAttributes) {
+                            if (proj == attribute) {
+                                verifyProjection = true;
+                            }
+                        }
+                        if (verifyProjection == false) {
+                            send(new Message(MessageAction.ERROR, "Nu exista cheia in tabela '" + table));
+                            return;
+                        }
+                        verifyProjection = false;
+                    }
+
+                    if (selection != null) {
+                        foreach (string proj in projection) {
+                            foreach (string attribute in selectAttributes) {
+                                if (proj == attribute) {
+                                    verifySelection = true;
+                                }
+                            }
+                            if (verifyProjection == false) {
+                                send(new Message(MessageAction.ERROR, "Nu exista cheia in tabela '" + table));
+                                return;
+                            }
+                            verifySelection = false;
+                        }
+                    }
+                }
+            } else {
+                send(new Message(MessageAction.ERROR, "Va rugam sa specificati campurile tabelei sau '*' pentru selectie totala."));
+                return;
+            }
+        }
+
         public static void executeQuery(SQLQuery sqlQuery) {
             catalog.Load("../../../Catalog.xml");
 
@@ -811,44 +852,13 @@ namespace Server {
                             return;
                         }
 
-                        if (sqlQuery.SELECT_PROJECTION != null) {
-                            if (sqlQuery.SELECT_PROJECTION.Count() > 1 && sqlQuery.SELECT_PROJECTION[0] != "*") {
-                                List<string> selectAttributes = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/Structure", "name");
-                                bool verifyProjection = false;
-                                bool verifySelection = false;
+                        List<string> selectionList = new List<string>();
 
-                                foreach (string projection in sqlQuery.SELECT_PROJECTION) {
-                                    foreach (string attribute in selectAttributes) {
-                                        if (projection == attribute) {
-                                            verifyProjection = true;
-                                        }
-                                    }
-                                    if (verifyProjection == false) {
-                                        send(new Message(MessageAction.ERROR, "Nu exista cheia in tabela '" + sqlQuery.SELECT_TABLE_NAME));
-                                        return;
-                                    }
-                                    verifyProjection = false;
-                                }
-
-                                if (sqlQuery.SELECT_SELECTION != null) {
-                                    foreach (WhereCondition selection in sqlQuery.SELECT_SELECTION) {
-                                        foreach (string attribute in selectAttributes) {
-                                            if (selection.name == attribute) {
-                                                verifySelection = true;
-                                            }
-                                        }
-                                        if (verifySelection == false) {
-                                            send(new Message(MessageAction.ERROR, "Nu exista cheia in tabela '" + sqlQuery.SELECT_TABLE_NAME));
-                                            return;
-                                        }
-                                        verifySelection = false;
-                                    }
-                                }
-                            }
-                        } else {
-                            send(new Message(MessageAction.ERROR, "Va rugam sa specificati campurile tabelei sau '*' pentru selectie totala."));
-                            return;
+                        foreach (WhereCondition selection in sqlQuery.SELECT_SELECTION) {
+                            selectionList.Add(selection.name);
                         }
+
+                        verifyIfTheQueryAttributesExistInXml(sqlQuery.SELECT_PROJECTION, sqlQuery.SELECT_TABLE_NAME, selectionList);
 
                         // TODO: Check for the projection & selection (where conditions) fields to exist in the table structure.
 
@@ -1001,6 +1011,58 @@ namespace Server {
                         }
 
                         send(new Message(MessageAction.SUCCESS_SELECT, message));
+                        return;
+
+
+
+                    case SQLQueryType.JOIN:
+                        if (currentDatabase == null) {
+                            send(new Message(MessageAction.ERROR, "Nicio baza de date selectata."));
+                            return;
+                        }
+                        if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_JOIN_FIRST_TABLE + "']")) {
+                            send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.SELECT_JOIN_FIRST_TABLE + "' nu exista."));
+                            return;
+                        }
+                        if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_JOIN_SECOND_TABLE + "']")) {
+                            send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.SELECT_JOIN_SECOND_TABLE + "' nu exista."));
+                            return;
+                        }
+
+                        List<string> projectionFirstTable = new List<string>();
+                        List<string> projectionSecondTable = new List<string>();
+                        List<string> selectionFirstTable = new List<string>();
+                        List<string> selectionSecondTable = new List<string>();
+
+                        foreach (KeyValuePair<string,string> projection in sqlQuery.SELECT_JOIN_PROJECTION) {
+                            if(projection.Key == sqlQuery.SELECT_JOIN_FIRST_TABLE) {
+                                projectionFirstTable.Add(projection.Value);
+                            } else {
+                                if (projection.Key == sqlQuery.SELECT_JOIN_SECOND_TABLE) {
+                                    projectionSecondTable.Add(projection.Value);
+                                } else {
+                                    send(new Message(MessageAction.ERROR, "Tabela '" + projection.Key + "' nu corespunde."));
+                                    return;
+                                }
+                            }
+                        }
+
+                        foreach (KeyValuePair<string, string> selection in sqlQuery.SELECT_JOIN_SELECTION) {
+                            if (selection.Key == sqlQuery.SELECT_JOIN_FIRST_TABLE) {
+                                selectionFirstTable.Add(selection.Value);
+                            } else {
+                                if (selection.Key == sqlQuery.SELECT_JOIN_SECOND_TABLE) {
+                                    selectionSecondTable.Add(selection.Value);
+                                } else {
+                                    send(new Message(MessageAction.ERROR, "Tabela '" + selection.Key + "' nu corespunde."));
+                                    return;
+                                }
+                            }
+                        }
+
+                        verifyIfTheQueryAttributesExistInXml(projectionFirstTable, sqlQuery.SELECT_JOIN_FIRST_TABLE, selectionFirstTable);
+                        verifyIfTheQueryAttributesExistInXml(projectionSecondTable, sqlQuery.SELECT_JOIN_SECOND_TABLE, selectionSecondTable);
+
                         return;
 
                     default:
@@ -1320,13 +1382,15 @@ namespace Server {
                                     string[] second = selectReplacedArgs[10].Split('.');
                                     KeyValuePair<string, string> firstSelection = new KeyValuePair<string, string>(first[0], first[1]);
                                     KeyValuePair<string, string> secondSelection = new KeyValuePair<string, string>(second[0], second[1]);
+                                    List<KeyValuePair<string, string>> selection = new List<KeyValuePair<string, string>>();
+                                    selection.Add(firstSelection);
+                                    selection.Add(secondSelection);
 
                                     sqlQuery = new SQLQuery(SQLQueryType.SELECT);
                                     sqlQuery.SELECT_JOIN_PROJECTION = projection;
                                     sqlQuery.SELECT_JOIN_FIRST_TABLE = selectReplacedArgs[3];
                                     sqlQuery.SELECT_JOIN_SECOND_TABLE = selectReplacedArgs[6];
-                                    sqlQuery.SELECT_JOIN_FIRST_SELECTION = firstSelection;
-                                    sqlQuery.SELECT_JOIN_SECOND_SELECTION = secondSelection;
+                                    sqlQuery.SELECT_JOIN_SELECTION = selection;
 
                                 } else {
                                     sqlQuery = new SQLQuery(SQLQueryType.ERROR);

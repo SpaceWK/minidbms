@@ -17,6 +17,7 @@ namespace Server {
         DELETE,
 
         SELECT,
+        JOIN,
 
         ERROR
     }
@@ -65,8 +66,7 @@ namespace Server {
         public List<KeyValuePair<string,string>>? SELECT_JOIN_PROJECTION;
         public string? SELECT_JOIN_FIRST_TABLE;
         public string? SELECT_JOIN_SECOND_TABLE;
-        public KeyValuePair<string, string>? SELECT_JOIN_FIRST_SELECTION;
-        public KeyValuePair<string, string>? SELECT_JOIN_SECOND_SELECTION;
+        public List<KeyValuePair<string, string>>? SELECT_JOIN_SELECTION;
 
         public SQLQuery(SQLQueryType type) {
             this.type = type;
