@@ -1,4 +1,5 @@
 ﻿using MongoDB.Driver;
+using SharpCompress.Compressors.Xz;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -30,6 +31,7 @@ namespace Server {
         public static string currentDatabase;
 
         public static string workingPath;
+        private static Random rnd;
 
         public static void Main(string[] args) {
             workingPath = Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName;
@@ -308,6 +310,259 @@ namespace Server {
             }
 
             return true;
+        }
+
+        public static void verifyIfTheQueryAttributesExistInXml(List<string> projection, string table, List<string> selection) {
+            if (projection != null) {
+                if (projection.Count() > 1 && projection[0] != "*") {
+                    List<string> selectAttributes = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + table + "']/Structure", "name");
+                    bool verifyProjection = false;
+                    bool verifySelection = false;
+
+                    foreach (string proj in projection) {
+                        foreach (string attribute in selectAttributes) {
+                            if (proj == attribute) {
+                                verifyProjection = true;
+                            }
+                        }
+                        if (verifyProjection == false) {
+                            send(new Message(MessageAction.ERROR, "Nu exista cheia in tabela '" + table));
+                            return;
+                        }
+                        verifyProjection = false;
+                    }
+
+                    if (selection != null) {
+                        foreach (string sel in selection) {
+                            foreach (string attribute in selectAttributes) {
+                                if (sel == attribute) {
+                                    verifySelection = true;
+                                }
+                            }
+                            if (verifySelection == false) {
+                                send(new Message(MessageAction.ERROR, "Nu exista cheia in tabela '" + table));
+                                return;
+                            }
+                            verifySelection = false;
+                        }
+                    }
+                }
+            } else {
+                send(new Message(MessageAction.ERROR, "Va rugam sa specificati campurile tabelei sau '*' pentru selectie totala."));
+                return;
+            }
+        }
+
+        public static List<string> indexedNestedLoopsAlgorithm(List<KeyValuePair<string, string>> projection, string firstTable, string secondTable, List<KeyValuePair<string, string>> selection) {
+            List<string> joinSelectFirstTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + firstTable + "']/PrimaryKeys");
+            List<string> joinSelectSecondTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + secondTable + "']/PrimaryKeys");
+            List<string> joinSelectSecondTableFKs = getXmlTableForeignKeys(secondTable).Select(fk => fk.referencedTableKey).ToList();
+            string tablePK = joinSelectFirstTablePKs.First();
+
+            List<Record> firstTableRecords = mongoDBService.getAll(currentDatabase, firstTable);
+            List<Record> secondTableRecords = mongoDBService.getAll(currentDatabase, secondTable);
+            string idxTableName = "idx_" + secondTable + "_" + tablePK;
+            List<Record> idxSecondTableRecords = mongoDBService.getAll(currentDatabase, idxTableName);
+            Dictionary<Record, Record> finalRecords = new Dictionary<Record, Record>();
+
+            if (firstTableRecords.Count() > 0) {
+                foreach (Record firstTableRecord in firstTableRecords) {
+                    foreach (Record idxSecondTableRecord in idxSecondTableRecords) {
+                        if (firstTableRecord.key == idxSecondTableRecord.key) {
+                            string[] idxSecondTableValues = idxSecondTableRecord.value.Split('#');
+                            for (int i = 0; i < idxSecondTableValues.Length; i++) {
+                                foreach (Record secondTableRecord in secondTableRecords) {
+                                    if (secondTableRecord.key == idxSecondTableValues[i]) {
+                                        finalRecords.Add(secondTableRecord, firstTableRecord);
+                                        break;
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            List<string> joinSelectedData = new List<string>();
+            List<string> joinData = new List<string>();
+            int contor1 = 0, contor2 = 0;
+
+            List<string> firstTableStructure = getXmlTableStructure(firstTable);
+            firstTableStructure = getXmlTableStructure(firstTable, true);
+            List<string> secondTableStructure = getXmlTableStructure(firstTable);
+            secondTableStructure = getXmlTableStructure(secondTable, true);
+
+            foreach (Record secondTableFinalRecord in finalRecords.Keys) {
+                foreach (Record firstTableFinalRecord in finalRecords.Values) {
+                    if (contor1 == contor2) {
+                        if (secondTableFinalRecord.key.Contains('$')) {
+                            string[] secondTableKeyRecordConcat = secondTableFinalRecord.key.Split('$');
+                            foreach (KeyValuePair<string, string> selectKey in projection) {
+                                if (selectKey.Key == firstTable) {
+                                    if (joinSelectFirstTablePKs.Contains(selectKey.Value)) {
+                                        joinSelectedData.Add(firstTableFinalRecord.key);
+                                    } else {
+                                        joinSelectedData.Add(firstTableFinalRecord.getKeyValue(selectKey.Value, firstTableStructure));
+                                    }
+                                } else if (selectKey.Key == secondTable) {
+                                    if (joinSelectSecondTablePKs.Contains(selectKey.Value)) {
+                                        int contor3 = 1, contor4 = 1;
+                                        foreach (string pk in joinSelectSecondTablePKs) {
+                                            for (int i = 0; i < secondTableKeyRecordConcat.Length; i++) {
+                                                if (contor3 == contor4) {
+                                                    if (pk == selectKey.Value) {
+                                                        joinSelectedData.Add(secondTableKeyRecordConcat[i]);
+                                                    }
+                                                    break;
+                                                }
+                                                contor4++;
+                                            }
+                                            contor3++;
+                                        }
+                                    } else {
+                                        joinSelectedData.Add(secondTableFinalRecord.getKeyValue(selectKey.Value, secondTableStructure));
+                                    }
+                                }
+                            }
+                        } else {
+                            foreach (KeyValuePair<string, string> selectKey in projection) {
+                                if (selectKey.Key == firstTable) {
+                                    if (joinSelectFirstTablePKs.Contains(selectKey.Value)) {
+                                        joinSelectedData.Add(firstTableFinalRecord.key);
+                                    } else {
+                                        joinSelectedData.Add(firstTableFinalRecord.getKeyValue(selectKey.Value, firstTableStructure));
+                                    }
+                                } else if (selectKey.Key == secondTable) {
+                                    if (joinSelectSecondTablePKs.Contains(selectKey.Value)) {
+                                        joinSelectedData.Add(secondTableFinalRecord.key);
+                                    } else {
+                                        joinSelectedData.Add(secondTableFinalRecord.getKeyValue(selectKey.Value, secondTableStructure));
+                                    }
+                                }
+                            }
+                        }
+                        contor2 = 0;
+                        break;
+                    }
+                    contor2++;
+                }
+                contor1++;
+
+                if (joinSelectedData.Count() > 0) {
+                    joinData.Add(string.Join("#", joinSelectedData));
+                }
+                joinSelectedData = new List<string>();
+            }
+            return joinData;
+        }
+
+        public static List<string> sortMergeAlgorithm(List<KeyValuePair<string, string>> projection, string firstTable, string secondTable, List<KeyValuePair<string, string>> selection) {
+            List<string> joinSelectFirstTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + firstTable + "']/PrimaryKeys");
+            List<string> joinSelectSecondTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + secondTable + "']/PrimaryKeys");
+            List<string> joinSelectSecondTableFKs = getXmlTableForeignKeys(secondTable).Select(fk => fk.referencedTableKey).ToList();
+            string tablePK = joinSelectFirstTablePKs.First();
+
+            List<Record> firstTableRecords = mongoDBService.getAll(currentDatabase, firstTable);
+            List<Record> secondTableRecords = mongoDBService.getAll(currentDatabase, secondTable);
+            string idxTableName = "idx_" + secondTable + "_" + tablePK;
+            List<Record> idxSecondTableRecords = mongoDBService.getAll(currentDatabase, idxTableName);
+            var idxSecondTableRecordsSorted = idxSecondTableRecords.OrderBy(x => x.key);
+            var firstTableRecordsSorted = firstTableRecords.OrderBy(x => x.key);
+            var secondTableRecordsSorted = secondTableRecords.OrderBy(x => x.key);
+            Dictionary<Record, Record> finalRecords = new Dictionary<Record, Record>();
+
+            if (firstTableRecords.Count() > 0) {
+                foreach (Record firstTableRecord in firstTableRecordsSorted) {
+                    foreach (Record idxSecondTableRecord in idxSecondTableRecordsSorted) {
+                        if (firstTableRecord.key == idxSecondTableRecord.key) {
+                            string[] idxSecondTableValues = idxSecondTableRecord.value.Split('#');
+                            Array.Sort(idxSecondTableValues);
+                            for(int i = 0; i < idxSecondTableValues.Length; i++) {
+                                foreach(Record secondTableRecord in secondTableRecordsSorted) {
+                                    if (secondTableRecord.key == idxSecondTableValues[i]) {
+                                        finalRecords.Add(secondTableRecord, firstTableRecord);
+                                        break;
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            List<string> joinSelectedData = new List<string>();
+            List<string> joinData = new List<string>();
+            int contor1 = 0, contor2 = 0;
+
+            List<string> firstTableStructure = getXmlTableStructure(firstTable);
+            firstTableStructure = getXmlTableStructure(firstTable, true);
+            List<string> secondTableStructure = getXmlTableStructure(firstTable);
+            secondTableStructure = getXmlTableStructure(secondTable, true);
+
+            foreach (Record secondTableFinalRecord in finalRecords.Keys) {
+                foreach (Record firstTableFinalRecord in finalRecords.Values) {
+                    if (contor1 == contor2) {
+                        if (secondTableFinalRecord.key.Contains('$')) {
+                            string[] secondTableKeyRecordConcat = secondTableFinalRecord.key.Split('$');
+                            foreach (KeyValuePair<string, string> selectKey in projection) {
+                                if (selectKey.Key == firstTable) {
+                                    if (joinSelectFirstTablePKs.Contains(selectKey.Value)) {
+                                        joinSelectedData.Add(firstTableFinalRecord.key);
+                                    } else {
+                                        joinSelectedData.Add(firstTableFinalRecord.getKeyValue(selectKey.Value, firstTableStructure));
+                                    }
+                                } else if (selectKey.Key == secondTable) {
+                                    if (joinSelectSecondTablePKs.Contains(selectKey.Value)) {
+                                        int contor3 = 1, contor4 = 1;
+                                        foreach (string pk in joinSelectSecondTablePKs) {
+                                            for (int i = 0; i < secondTableKeyRecordConcat.Length; i++) {
+                                                if (contor3 == contor4) {
+                                                    if (pk == selectKey.Value) {
+                                                        joinSelectedData.Add(secondTableKeyRecordConcat[i]);
+                                                    }
+                                                    break;
+                                                }
+                                                contor4++;
+                                            }
+                                            contor3++;
+                                        }
+                                    } else {
+                                        joinSelectedData.Add(secondTableFinalRecord.getKeyValue(selectKey.Value, secondTableStructure));
+                                    }
+                                }
+                            }
+                        } else {
+                            foreach (KeyValuePair<string, string> selectKey in projection) {
+                                if (selectKey.Key == firstTable) {
+                                    if (joinSelectFirstTablePKs.Contains(selectKey.Value)) {
+                                        joinSelectedData.Add(firstTableFinalRecord.key);
+                                    } else {
+                                        joinSelectedData.Add(firstTableFinalRecord.getKeyValue(selectKey.Value, firstTableStructure));
+                                    }
+                                } else if (selectKey.Key == secondTable) {
+                                    if (joinSelectSecondTablePKs.Contains(selectKey.Value)) {
+                                        joinSelectedData.Add(secondTableFinalRecord.key);
+                                    } else {
+                                        joinSelectedData.Add(secondTableFinalRecord.getKeyValue(selectKey.Value, secondTableStructure));
+                                    }
+                                }
+                            }
+                        }
+                        contor2 = 0;
+                        break;
+                    }
+                    contor2++;
+                }
+                contor1++;
+
+                if (joinSelectedData.Count() > 0) {
+                    joinData.Add(string.Join("#", joinSelectedData));
+                }
+                joinSelectedData = new List<string>();
+            }
+            return joinData;
         }
 
         public static void executeQuery(SQLQuery sqlQuery) {
@@ -698,6 +953,30 @@ namespace Server {
                                     new Record(insertPrimaryKey, string.Join("#", insertValues))
                                 );
                             }
+
+                            //rnd = new Random();
+                            //int[] credits = { 5, 6, 7 };
+
+                            //for (int i = 0; i < 1000; i++) {
+                            //    int random = credits[rnd.Next(0, 3)];
+                            //    KeyValuePair<string, string> kv = new KeyValuePair<string, string>("D" + i, "Database " + i + "#" + random);
+                            //    KeyValuePair<string, string> kv1 = new KeyValuePair<string, string>("D" + i, random.ToString());
+
+                            //    mongoDBService.insert(
+                            //    currentDatabase,
+                            //    sqlQuery.INSERT_TABLE_NAME,
+                            //    new Record(kv.Key, string.Join("#", kv.Value))
+                            //    );
+
+                            //    insertIDXCheck = insertDataIntoIdxCollection(
+                            //    "idx_" + sqlQuery.INSERT_TABLE_NAME + "_" + "CreditNr",
+                            //    kv1,
+                            //    "D" + i,
+                            //    insertUKs
+                            //    );
+
+                            //}
+
                         } else {
                             send(new Message(MessageAction.ERROR, "A aparut o eroare la inserarea datelor in tabela '" + sqlQuery.INSERT_TABLE_NAME + "'!"));
                             return;
@@ -811,44 +1090,13 @@ namespace Server {
                             return;
                         }
 
-                        if (sqlQuery.SELECT_PROJECTION != null) {
-                            if (sqlQuery.SELECT_PROJECTION.Count() > 1 && sqlQuery.SELECT_PROJECTION[0] != "*") {
-                                List<string> selectAttributes = getXmlNodeChildrenAttributeValues(@"//Databases/Database[@databaseName='" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/Structure", "name");
-                                bool verifyProjection = false;
-                                bool verifySelection = false;
+                        List<string> selectionList = new List<string>();
 
-                                foreach (string projection in sqlQuery.SELECT_PROJECTION) {
-                                    foreach (string attribute in selectAttributes) {
-                                        if (projection == attribute) {
-                                            verifyProjection = true;
-                                        }
-                                    }
-                                    if (verifyProjection == false) {
-                                        send(new Message(MessageAction.ERROR, "Nu exista cheia in tabela '" + sqlQuery.SELECT_TABLE_NAME));
-                                        return;
-                                    }
-                                    verifyProjection = false;
-                                }
-
-                                if (sqlQuery.SELECT_SELECTION != null) {
-                                    foreach (WhereCondition selection in sqlQuery.SELECT_SELECTION) {
-                                        foreach (string attribute in selectAttributes) {
-                                            if (selection.name == attribute) {
-                                                verifySelection = true;
-                                            }
-                                        }
-                                        if (verifySelection == false) {
-                                            send(new Message(MessageAction.ERROR, "Nu exista cheia in tabela '" + sqlQuery.SELECT_TABLE_NAME));
-                                            return;
-                                        }
-                                        verifySelection = false;
-                                    }
-                                }
-                            }
-                        } else {
-                            send(new Message(MessageAction.ERROR, "Va rugam sa specificati campurile tabelei sau '*' pentru selectie totala."));
-                            return;
+                        foreach (WhereCondition selection in sqlQuery.SELECT_SELECTION) {
+                            selectionList.Add(selection.name);
                         }
+
+                        verifyIfTheQueryAttributesExistInXml(sqlQuery.SELECT_PROJECTION, sqlQuery.SELECT_TABLE_NAME, selectionList);
 
                         // TODO: Check for the projection & selection (where conditions) fields to exist in the table structure.
 
@@ -904,7 +1152,7 @@ namespace Server {
                         // With conditions
                         List<Record> selectedRecords = new List<Record>();
                         List<Record> conditionRecords = new List<Record>();
-
+                        
                         List<string> selectIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/IndexFiles");
                         List<string> selectUKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/UniqueKeys");
                         List<string> selectFKs = getXmlTableForeignKeys(sqlQuery.SELECT_TABLE_NAME).Select(fk => fk.referencedTableKey).ToList();
@@ -966,8 +1214,8 @@ namespace Server {
                                     } else {
                                         string value = mainTableSelectRecord.getKeyValue(condition.name, selectTableStructure);
                                         if (
-                                            value == condition.value &&
-                                            conditionRecords.FindIndex(item => item.getKeyValue(condition.name, selectTableStructure) == condition.value) == -1
+                                            value == condition.value //&&
+                                            //conditionRecords.FindIndex(item => item.getKeyValue(condition.name, selectTableStructure) == condition.value) == -1
                                         ) {
                                             conditionRecords.Add(mainTableSelectRecord);
                                         }
@@ -1001,6 +1249,102 @@ namespace Server {
                         }
 
                         send(new Message(MessageAction.SUCCESS_SELECT, message));
+                        return;
+
+
+                    case SQLQueryType.JOIN:
+                        if (currentDatabase == null) {
+                            send(new Message(MessageAction.ERROR, "Nicio baza de date selectata."));
+                            return;
+                        }
+                        if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_JOIN_FIRST_TABLE + "']")) {
+                            send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.SELECT_JOIN_FIRST_TABLE + "' nu exista."));
+                            return;
+                        }
+                        if (!xmlNodeExists(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_JOIN_SECOND_TABLE + "']")) {
+                            send(new Message(MessageAction.ERROR, "Tabela '" + sqlQuery.SELECT_JOIN_SECOND_TABLE + "' nu exista."));
+                            return;
+                        }
+
+                        List<string> projectionFirstTable = new List<string>();
+                        List<string> projectionSecondTable = new List<string>();
+                        List<string> selectionFirstTable = new List<string>();
+                        List<string> selectionSecondTable = new List<string>();
+
+                        foreach (KeyValuePair<string, string> projection in sqlQuery.SELECT_JOIN_PROJECTION) {
+                            if (projection.Key == sqlQuery.SELECT_JOIN_FIRST_TABLE) {
+                                projectionFirstTable.Add(projection.Value);
+                            } else {
+                                if (projection.Key == sqlQuery.SELECT_JOIN_SECOND_TABLE) {
+                                    projectionSecondTable.Add(projection.Value);
+                                } else {
+                                    send(new Message(MessageAction.ERROR, "Tabela '" + projection.Key + "' nu corespunde."));
+                                    return;
+                                }
+                            }
+                        }
+
+                        foreach (KeyValuePair<string, string> selection in sqlQuery.SELECT_JOIN_SELECTION) {
+                            if (selection.Key == sqlQuery.SELECT_JOIN_FIRST_TABLE) {
+                                selectionFirstTable.Add(selection.Value);
+                            } else {
+                                if (selection.Key == sqlQuery.SELECT_JOIN_SECOND_TABLE) {
+                                    selectionSecondTable.Add(selection.Value);
+                                } else {
+                                    send(new Message(MessageAction.ERROR, "Tabela '" + selection.Key + "' nu corespunde."));
+                                    return;
+                                }
+                            }
+                        }
+
+                        verifyIfTheQueryAttributesExistInXml(projectionFirstTable, sqlQuery.SELECT_JOIN_FIRST_TABLE, selectionFirstTable);
+                        verifyIfTheQueryAttributesExistInXml(projectionSecondTable, sqlQuery.SELECT_JOIN_SECOND_TABLE, selectionSecondTable);
+
+                        List<string> joinSelectFirstTableStructure = getXmlTableStructure(sqlQuery.SELECT_JOIN_FIRST_TABLE);
+                        List<string> joinSelectSecondTableStructure = getXmlTableStructure(sqlQuery.SELECT_JOIN_SECOND_TABLE);
+                        
+                        List<string> joinSelectProjection = new List<string>();
+
+                        // Don t apply for '*', select anything (use <key,value> and need to make other projection for '*')
+                        if (sqlQuery.SELECT_JOIN_PROJECTION.Count() > 1) {
+                            foreach (var projection in sqlQuery.SELECT_JOIN_PROJECTION) {
+                                if (projection.Key == sqlQuery.SELECT_JOIN_FIRST_TABLE) {
+                                    foreach (string key in joinSelectFirstTableStructure) {
+                                        if (projection.Value == key) {
+                                            joinSelectProjection.Add(projection.Value);
+                                        }
+                                    }
+                                } else if (projection.Key == sqlQuery.SELECT_JOIN_SECOND_TABLE) {
+                                    foreach (string key in joinSelectSecondTableStructure) {
+                                        if (projection.Value == key) {
+                                            joinSelectProjection.Add(projection.Value);
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            send(new Message(MessageAction.ERROR, "Nu s-au selectat atributele."));
+                            return;
+                        }
+
+                        string joinMessage = "";
+                        joinMessage += string.Join(",", joinSelectProjection);
+                        joinMessage += ":";
+
+                        List<string> joinData = new List<string>();
+
+                        // Tables needs to be given in order. First the table with primary key and than the second table that refer to it.
+                        
+                        joinData = indexedNestedLoopsAlgorithm(sqlQuery.SELECT_JOIN_PROJECTION, sqlQuery.SELECT_JOIN_FIRST_TABLE, sqlQuery.SELECT_JOIN_SECOND_TABLE, sqlQuery.SELECT_JOIN_SELECTION);
+                        //joinData = sortMergeAlgorithm(sqlQuery.SELECT_JOIN_PROJECTION, sqlQuery.SELECT_JOIN_FIRST_TABLE, sqlQuery.SELECT_JOIN_SECOND_TABLE, sqlQuery.SELECT_JOIN_SELECTION);
+
+                        if (joinData.Count() > 0) {
+                            joinMessage += string.Join("^", joinData);
+                        } else {
+                            joinMessage = "NO_RESULTS";
+                        }
+
+                        send(new Message(MessageAction.SUCCESS_SELECT, joinMessage));
                         return;
 
                     default:
@@ -1239,67 +1583,112 @@ namespace Server {
                     string selectReplacedStatement = Regex.Replace(statement, pattern, "%");
                     string[] selectReplacedArgs = selectReplacedStatement.Split(" ");
 
-                    if (selectReplacedStatement.Contains("FROM", StringComparison.OrdinalIgnoreCase)) {
-                        if (matches.Count() > 0) {
-                            List<string> projection = new List<string>();
-                            bool isDistinctSelect = false;
+                    switch (selectReplacedArgs[4].ToLower()) {
+                        case "where":
+                            if (selectReplacedStatement.Contains("FROM", StringComparison.OrdinalIgnoreCase)) {
+                                if (matches.Count() > 0) {
+                                    List<string> projection = new List<string>();
+                                    bool isDistinctSelect = false;
 
-                            if (matches[0].Contains("DISTINCT", StringComparison.OrdinalIgnoreCase)) {
-                                string distinctPattern = "(?<=DISTINCT )(.*)(?= FROM)";
-                                matches = Regex.Matches(statement, distinctPattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
-                                string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries); // Watch out for the attributes to be split by ",".
-                                foreach (string attribute in attributes) {
-                                    projection.Add(attribute);
-                                }
+                                    if (matches[0].Contains("DISTINCT", StringComparison.OrdinalIgnoreCase)) {
+                                        string distinctPattern = "(?<=DISTINCT )(.*)(?= FROM)";
+                                        matches = Regex.Matches(statement, distinctPattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
+                                        string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries); // Watch out for the attributes to be split by ",".
+                                        foreach (string attribute in attributes) {
+                                            projection.Add(attribute);
+                                        }
 
-                                isDistinctSelect = true;
-                            } else {
-                                string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries); // Watch out for the attributes to be split by ",".
-                                foreach (string attribute in attributes) {
-                                    projection.Add(attribute);
-                                }
-                            }
+                                        isDistinctSelect = true;
+                                    } else {
+                                        string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries); // Watch out for the attributes to be split by ",".
+                                        foreach (string attribute in attributes) {
+                                            projection.Add(attribute);
+                                        }
+                                    }
 
-                            string selectPattern = @"(?<=WHERE ).*";
-                            List<string> selectMatches = Regex.Matches(selectReplacedStatement, selectPattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
-                            List<WhereCondition> whereConditions = new List<WhereCondition>();
-                            if (selectMatches.Count() > 0) {
-                                string[] conditions = Regex.Split(selectMatches[0], " AND ", RegexOptions.IgnoreCase);
-                                foreach (string condition in conditions) {
-                                    int firstSpace = condition.IndexOf(" "); // Watch out for the conditions to be split by " ".
-                                    string[] conditionArgs = {
+                                    string selectPattern = @"(?<=WHERE ).*";
+                                    List<string> selectMatches = Regex.Matches(selectReplacedStatement, selectPattern, RegexOptions.IgnoreCase).Cast<Match>().Select(match => match.Value).ToList();
+                                    List<WhereCondition> whereConditions = new List<WhereCondition>();
+                                    if (selectMatches.Count() > 0) {
+                                        string[] conditions = Regex.Split(selectMatches[0], " AND ", RegexOptions.IgnoreCase);
+                                        foreach (string condition in conditions) {
+                                            int firstSpace = condition.IndexOf(" "); // Watch out for the conditions to be split by " ".
+                                            string[] conditionArgs = {
                                         condition.Substring(0, firstSpace),
                                         condition.Substring(firstSpace + 1, 1),
                                         condition.Substring(firstSpace + 3)
                                     };
-                                    switch (conditionArgs[1]) {
-                                        case "=":
-                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.EQUAL, conditionArgs[2].Replace("\'", String.Empty)));
-                                            break;
-                                        case "<":
-                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.LESS_THAN, conditionArgs[2].Replace("\'", String.Empty)));
-                                            break;
-                                        case ">":
-                                            whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_THAN, conditionArgs[2].Replace("\'", String.Empty)));
-                                            break;
-                                        default:
-                                            break;
+                                            switch (conditionArgs[1]) {
+                                                case "=":
+                                                    whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.EQUAL, conditionArgs[2].Replace("\'", String.Empty)));
+                                                    break;
+                                                case "<":
+                                                    whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.LESS_THAN, conditionArgs[2].Replace("\'", String.Empty)));
+                                                    break;
+                                                case ">":
+                                                    whereConditions.Add(new WhereCondition(conditionArgs[0], ComparisonOperator.GREATER_THAN, conditionArgs[2].Replace("\'", String.Empty)));
+                                                    break;
+                                                default:
+                                                    break;
+                                            }
+                                        }
                                     }
-                                }
-                            }
 
-                            sqlQuery = new SQLQuery(SQLQueryType.SELECT);
-                            sqlQuery.SELECT_PROJECTION = projection;
-                            sqlQuery.SELECT_TABLE_NAME = selectReplacedArgs[3];
-                            sqlQuery.SELECT_DISTINCT = isDistinctSelect;
-                            sqlQuery.SELECT_SELECTION = whereConditions.Count() > 0 ? whereConditions : null;
-                        } else {
+                                    sqlQuery = new SQLQuery(SQLQueryType.SELECT);
+                                    sqlQuery.SELECT_PROJECTION = projection;
+                                    sqlQuery.SELECT_TABLE_NAME = selectReplacedArgs[3];
+                                    sqlQuery.SELECT_DISTINCT = isDistinctSelect;
+                                    sqlQuery.SELECT_SELECTION = whereConditions.Count() > 0 ? whereConditions : null;
+                                } else {
+                                    sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                                    sqlQuery.error = "SQL query invalid.";
+                                }
+                            } else {
+                                sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                                sqlQuery.error = "SQL query invalid.";
+                            }
+                            break;
+
+                        case "inner":
+                            if (selectReplacedStatement.Contains("FROM", StringComparison.OrdinalIgnoreCase)) {
+                                if (matches.Count() > 0) {
+                                    List<KeyValuePair<string, string>> projection = new List<KeyValuePair<string, string>>();
+
+                                    string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries); // Watch out for the attributes to be split by ",".
+                                    foreach (string attribute in attributes) {
+                                        string[] words = attribute.Split('.');
+                                        projection.Add(new KeyValuePair<string, string>(words[0], words[1]));
+                                    }
+
+                                    string[] first = selectReplacedArgs[8].Split('.');
+                                    string[] second = selectReplacedArgs[10].Split('.');
+                                    KeyValuePair<string, string> firstSelection = new KeyValuePair<string, string>(first[0], first[1]);
+                                    KeyValuePair<string, string> secondSelection = new KeyValuePair<string, string>(second[0], second[1]);
+                                    List<KeyValuePair<string, string>> selection = new List<KeyValuePair<string, string>>();
+                                    selection.Add(firstSelection);
+                                    selection.Add(secondSelection);
+
+                                    sqlQuery = new SQLQuery(SQLQueryType.JOIN);
+                                    sqlQuery.SELECT_JOIN_PROJECTION = projection;
+                                    sqlQuery.SELECT_JOIN_FIRST_TABLE = selectReplacedArgs[3];
+                                    sqlQuery.SELECT_JOIN_SECOND_TABLE = selectReplacedArgs[6];
+                                    sqlQuery.SELECT_JOIN_SELECTION = selection;
+
+                                } else {
+                                    sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                                    sqlQuery.error = "SQL query invalid.";
+                                }
+                            } else {
+                                sqlQuery = new SQLQuery(SQLQueryType.ERROR);
+                                sqlQuery.error = "SQL query invalid.";
+                            }
+                            break;
+
+                        default:
                             sqlQuery = new SQLQuery(SQLQueryType.ERROR);
                             sqlQuery.error = "SQL query invalid.";
-                        }
-                    } else {
-                        sqlQuery = new SQLQuery(SQLQueryType.ERROR);
-                        sqlQuery.error = "SQL query invalid.";
+
+                            break;
                     }
                     break;
 
