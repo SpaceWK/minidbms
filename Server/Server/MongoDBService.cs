@@ -12,7 +12,7 @@ namespace Server {
         public MongoClient mongoClient;
 
         public MongoDBService() {
-            this.mongoClient = new MongoClient("");
+            this.mongoClient = new MongoClient("mongodb+srv://minidbms:minidbms@cluster0.wz7z2bg.mongodb.net/test");
         }
 
         public bool createDatabase(string dbName) {
