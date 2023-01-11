@@ -1,5 +1,4 @@
 ﻿using MongoDB.Driver;
-using SharpCompress.Compressors.Xz;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -31,7 +30,6 @@ namespace Server {
         public static string currentDatabase;
 
         public static string workingPath;
-        private static Random rnd;
 
         public static void Main(string[] args) {
             workingPath = Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName;
@@ -333,13 +331,13 @@ namespace Server {
                     }
 
                     if (selection != null) {
-                        foreach (string sel in selection) {
+                        foreach (string proj in projection) {
                             foreach (string attribute in selectAttributes) {
-                                if (sel == attribute) {
+                                if (proj == attribute) {
                                     verifySelection = true;
                                 }
                             }
-                            if (verifySelection == false) {
+                            if (verifyProjection == false) {
                                 send(new Message(MessageAction.ERROR, "Nu exista cheia in tabela '" + table));
                                 return;
                             }
@@ -351,218 +349,6 @@ namespace Server {
                 send(new Message(MessageAction.ERROR, "Va rugam sa specificati campurile tabelei sau '*' pentru selectie totala."));
                 return;
             }
-        }
-
-        public static List<string> indexedNestedLoopsAlgorithm(List<KeyValuePair<string, string>> projection, string firstTable, string secondTable, List<KeyValuePair<string, string>> selection) {
-            List<string> joinSelectFirstTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + firstTable + "']/PrimaryKeys");
-            List<string> joinSelectSecondTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + secondTable + "']/PrimaryKeys");
-            List<string> joinSelectSecondTableFKs = getXmlTableForeignKeys(secondTable).Select(fk => fk.referencedTableKey).ToList();
-            string tablePK = joinSelectFirstTablePKs.First();
-
-            List<Record> firstTableRecords = mongoDBService.getAll(currentDatabase, firstTable);
-            List<Record> secondTableRecords = mongoDBService.getAll(currentDatabase, secondTable);
-            string idxTableName = "idx_" + secondTable + "_" + tablePK;
-            List<Record> idxSecondTableRecords = mongoDBService.getAll(currentDatabase, idxTableName);
-            Dictionary<Record, Record> finalRecords = new Dictionary<Record, Record>();
-
-            if (firstTableRecords.Count() > 0) {
-                foreach (Record firstTableRecord in firstTableRecords) {
-                    foreach (Record idxSecondTableRecord in idxSecondTableRecords) {
-                        if (firstTableRecord.key == idxSecondTableRecord.key) {
-                            string[] idxSecondTableValues = idxSecondTableRecord.value.Split('#');
-                            for (int i = 0; i < idxSecondTableValues.Length; i++) {
-                                foreach (Record secondTableRecord in secondTableRecords) {
-                                    if (secondTableRecord.key == idxSecondTableValues[i]) {
-                                        finalRecords.Add(secondTableRecord, firstTableRecord);
-                                        break;
-                                    }
-                                }
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-
-            List<string> joinSelectedData = new List<string>();
-            List<string> joinData = new List<string>();
-            int contor1 = 0, contor2 = 0;
-
-            List<string> firstTableStructure = getXmlTableStructure(firstTable);
-            firstTableStructure = getXmlTableStructure(firstTable, true);
-            List<string> secondTableStructure = getXmlTableStructure(firstTable);
-            secondTableStructure = getXmlTableStructure(secondTable, true);
-
-            foreach (Record secondTableFinalRecord in finalRecords.Keys) {
-                foreach (Record firstTableFinalRecord in finalRecords.Values) {
-                    if (contor1 == contor2) {
-                        if (secondTableFinalRecord.key.Contains('$')) {
-                            string[] secondTableKeyRecordConcat = secondTableFinalRecord.key.Split('$');
-                            foreach (KeyValuePair<string, string> selectKey in projection) {
-                                if (selectKey.Key == firstTable) {
-                                    if (joinSelectFirstTablePKs.Contains(selectKey.Value)) {
-                                        joinSelectedData.Add(firstTableFinalRecord.key);
-                                    } else {
-                                        joinSelectedData.Add(firstTableFinalRecord.getKeyValue(selectKey.Value, firstTableStructure));
-                                    }
-                                } else if (selectKey.Key == secondTable) {
-                                    if (joinSelectSecondTablePKs.Contains(selectKey.Value)) {
-                                        int contor3 = 1, contor4 = 1;
-                                        foreach (string pk in joinSelectSecondTablePKs) {
-                                            for (int i = 0; i < secondTableKeyRecordConcat.Length; i++) {
-                                                if (contor3 == contor4) {
-                                                    if (pk == selectKey.Value) {
-                                                        joinSelectedData.Add(secondTableKeyRecordConcat[i]);
-                                                    }
-                                                    break;
-                                                }
-                                                contor4++;
-                                            }
-                                            contor3++;
-                                        }
-                                    } else {
-                                        joinSelectedData.Add(secondTableFinalRecord.getKeyValue(selectKey.Value, secondTableStructure));
-                                    }
-                                }
-                            }
-                        } else {
-                            foreach (KeyValuePair<string, string> selectKey in projection) {
-                                if (selectKey.Key == firstTable) {
-                                    if (joinSelectFirstTablePKs.Contains(selectKey.Value)) {
-                                        joinSelectedData.Add(firstTableFinalRecord.key);
-                                    } else {
-                                        joinSelectedData.Add(firstTableFinalRecord.getKeyValue(selectKey.Value, firstTableStructure));
-                                    }
-                                } else if (selectKey.Key == secondTable) {
-                                    if (joinSelectSecondTablePKs.Contains(selectKey.Value)) {
-                                        joinSelectedData.Add(secondTableFinalRecord.key);
-                                    } else {
-                                        joinSelectedData.Add(secondTableFinalRecord.getKeyValue(selectKey.Value, secondTableStructure));
-                                    }
-                                }
-                            }
-                        }
-                        contor2 = 0;
-                        break;
-                    }
-                    contor2++;
-                }
-                contor1++;
-
-                if (joinSelectedData.Count() > 0) {
-                    joinData.Add(string.Join("#", joinSelectedData));
-                }
-                joinSelectedData = new List<string>();
-            }
-            return joinData;
-        }
-
-        public static List<string> sortMergeAlgorithm(List<KeyValuePair<string, string>> projection, string firstTable, string secondTable, List<KeyValuePair<string, string>> selection) {
-            List<string> joinSelectFirstTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + firstTable + "']/PrimaryKeys");
-            List<string> joinSelectSecondTablePKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + secondTable + "']/PrimaryKeys");
-            List<string> joinSelectSecondTableFKs = getXmlTableForeignKeys(secondTable).Select(fk => fk.referencedTableKey).ToList();
-            string tablePK = joinSelectFirstTablePKs.First();
-
-            List<Record> firstTableRecords = mongoDBService.getAll(currentDatabase, firstTable);
-            List<Record> secondTableRecords = mongoDBService.getAll(currentDatabase, secondTable);
-            string idxTableName = "idx_" + secondTable + "_" + tablePK;
-            List<Record> idxSecondTableRecords = mongoDBService.getAll(currentDatabase, idxTableName);
-            var idxSecondTableRecordsSorted = idxSecondTableRecords.OrderBy(x => x.key);
-            var firstTableRecordsSorted = firstTableRecords.OrderBy(x => x.key);
-            var secondTableRecordsSorted = secondTableRecords.OrderBy(x => x.key);
-            Dictionary<Record, Record> finalRecords = new Dictionary<Record, Record>();
-
-            if (firstTableRecords.Count() > 0) {
-                foreach (Record firstTableRecord in firstTableRecordsSorted) {
-                    foreach (Record idxSecondTableRecord in idxSecondTableRecordsSorted) {
-                        if (firstTableRecord.key == idxSecondTableRecord.key) {
-                            string[] idxSecondTableValues = idxSecondTableRecord.value.Split('#');
-                            Array.Sort(idxSecondTableValues);
-                            for(int i = 0; i < idxSecondTableValues.Length; i++) {
-                                foreach(Record secondTableRecord in secondTableRecordsSorted) {
-                                    if (secondTableRecord.key == idxSecondTableValues[i]) {
-                                        finalRecords.Add(secondTableRecord, firstTableRecord);
-                                        break;
-                                    }
-                                }
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-
-            List<string> joinSelectedData = new List<string>();
-            List<string> joinData = new List<string>();
-            int contor1 = 0, contor2 = 0;
-
-            List<string> firstTableStructure = getXmlTableStructure(firstTable);
-            firstTableStructure = getXmlTableStructure(firstTable, true);
-            List<string> secondTableStructure = getXmlTableStructure(firstTable);
-            secondTableStructure = getXmlTableStructure(secondTable, true);
-
-            foreach (Record secondTableFinalRecord in finalRecords.Keys) {
-                foreach (Record firstTableFinalRecord in finalRecords.Values) {
-                    if (contor1 == contor2) {
-                        if (secondTableFinalRecord.key.Contains('$')) {
-                            string[] secondTableKeyRecordConcat = secondTableFinalRecord.key.Split('$');
-                            foreach (KeyValuePair<string, string> selectKey in projection) {
-                                if (selectKey.Key == firstTable) {
-                                    if (joinSelectFirstTablePKs.Contains(selectKey.Value)) {
-                                        joinSelectedData.Add(firstTableFinalRecord.key);
-                                    } else {
-                                        joinSelectedData.Add(firstTableFinalRecord.getKeyValue(selectKey.Value, firstTableStructure));
-                                    }
-                                } else if (selectKey.Key == secondTable) {
-                                    if (joinSelectSecondTablePKs.Contains(selectKey.Value)) {
-                                        int contor3 = 1, contor4 = 1;
-                                        foreach (string pk in joinSelectSecondTablePKs) {
-                                            for (int i = 0; i < secondTableKeyRecordConcat.Length; i++) {
-                                                if (contor3 == contor4) {
-                                                    if (pk == selectKey.Value) {
-                                                        joinSelectedData.Add(secondTableKeyRecordConcat[i]);
-                                                    }
-                                                    break;
-                                                }
-                                                contor4++;
-                                            }
-                                            contor3++;
-                                        }
-                                    } else {
-                                        joinSelectedData.Add(secondTableFinalRecord.getKeyValue(selectKey.Value, secondTableStructure));
-                                    }
-                                }
-                            }
-                        } else {
-                            foreach (KeyValuePair<string, string> selectKey in projection) {
-                                if (selectKey.Key == firstTable) {
-                                    if (joinSelectFirstTablePKs.Contains(selectKey.Value)) {
-                                        joinSelectedData.Add(firstTableFinalRecord.key);
-                                    } else {
-                                        joinSelectedData.Add(firstTableFinalRecord.getKeyValue(selectKey.Value, firstTableStructure));
-                                    }
-                                } else if (selectKey.Key == secondTable) {
-                                    if (joinSelectSecondTablePKs.Contains(selectKey.Value)) {
-                                        joinSelectedData.Add(secondTableFinalRecord.key);
-                                    } else {
-                                        joinSelectedData.Add(secondTableFinalRecord.getKeyValue(selectKey.Value, secondTableStructure));
-                                    }
-                                }
-                            }
-                        }
-                        contor2 = 0;
-                        break;
-                    }
-                    contor2++;
-                }
-                contor1++;
-
-                if (joinSelectedData.Count() > 0) {
-                    joinData.Add(string.Join("#", joinSelectedData));
-                }
-                joinSelectedData = new List<string>();
-            }
-            return joinData;
         }
 
         public static void executeQuery(SQLQuery sqlQuery) {
@@ -953,30 +739,6 @@ namespace Server {
                                     new Record(insertPrimaryKey, string.Join("#", insertValues))
                                 );
                             }
-
-                            //rnd = new Random();
-                            //int[] credits = { 5, 6, 7 };
-
-                            //for (int i = 0; i < 1000; i++) {
-                            //    int random = credits[rnd.Next(0, 3)];
-                            //    KeyValuePair<string, string> kv = new KeyValuePair<string, string>("D" + i, "Database " + i + "#" + random);
-                            //    KeyValuePair<string, string> kv1 = new KeyValuePair<string, string>("D" + i, random.ToString());
-
-                            //    mongoDBService.insert(
-                            //    currentDatabase,
-                            //    sqlQuery.INSERT_TABLE_NAME,
-                            //    new Record(kv.Key, string.Join("#", kv.Value))
-                            //    );
-
-                            //    insertIDXCheck = insertDataIntoIdxCollection(
-                            //    "idx_" + sqlQuery.INSERT_TABLE_NAME + "_" + "CreditNr",
-                            //    kv1,
-                            //    "D" + i,
-                            //    insertUKs
-                            //    );
-
-                            //}
-
                         } else {
                             send(new Message(MessageAction.ERROR, "A aparut o eroare la inserarea datelor in tabela '" + sqlQuery.INSERT_TABLE_NAME + "'!"));
                             return;
@@ -1152,7 +914,7 @@ namespace Server {
                         // With conditions
                         List<Record> selectedRecords = new List<Record>();
                         List<Record> conditionRecords = new List<Record>();
-                        
+
                         List<string> selectIDXs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/IndexFiles");
                         List<string> selectUKs = getXmlNodeChildrenValues(@"//Databases/Database[@databaseName = '" + currentDatabase + "']/Tables/Table[@tableName='" + sqlQuery.SELECT_TABLE_NAME + "']/UniqueKeys");
                         List<string> selectFKs = getXmlTableForeignKeys(sqlQuery.SELECT_TABLE_NAME).Select(fk => fk.referencedTableKey).ToList();
@@ -1214,8 +976,8 @@ namespace Server {
                                     } else {
                                         string value = mainTableSelectRecord.getKeyValue(condition.name, selectTableStructure);
                                         if (
-                                            value == condition.value //&&
-                                            //conditionRecords.FindIndex(item => item.getKeyValue(condition.name, selectTableStructure) == condition.value) == -1
+                                            value == condition.value &&
+                                            conditionRecords.FindIndex(item => item.getKeyValue(condition.name, selectTableStructure) == condition.value) == -1
                                         ) {
                                             conditionRecords.Add(mainTableSelectRecord);
                                         }
@@ -1252,6 +1014,7 @@ namespace Server {
                         return;
 
 
+
                     case SQLQueryType.JOIN:
                         if (currentDatabase == null) {
                             send(new Message(MessageAction.ERROR, "Nicio baza de date selectata."));
@@ -1271,8 +1034,8 @@ namespace Server {
                         List<string> selectionFirstTable = new List<string>();
                         List<string> selectionSecondTable = new List<string>();
 
-                        foreach (KeyValuePair<string, string> projection in sqlQuery.SELECT_JOIN_PROJECTION) {
-                            if (projection.Key == sqlQuery.SELECT_JOIN_FIRST_TABLE) {
+                        foreach (KeyValuePair<string,string> projection in sqlQuery.SELECT_JOIN_PROJECTION) {
+                            if(projection.Key == sqlQuery.SELECT_JOIN_FIRST_TABLE) {
                                 projectionFirstTable.Add(projection.Value);
                             } else {
                                 if (projection.Key == sqlQuery.SELECT_JOIN_SECOND_TABLE) {
@@ -1300,51 +1063,6 @@ namespace Server {
                         verifyIfTheQueryAttributesExistInXml(projectionFirstTable, sqlQuery.SELECT_JOIN_FIRST_TABLE, selectionFirstTable);
                         verifyIfTheQueryAttributesExistInXml(projectionSecondTable, sqlQuery.SELECT_JOIN_SECOND_TABLE, selectionSecondTable);
 
-                        List<string> joinSelectFirstTableStructure = getXmlTableStructure(sqlQuery.SELECT_JOIN_FIRST_TABLE);
-                        List<string> joinSelectSecondTableStructure = getXmlTableStructure(sqlQuery.SELECT_JOIN_SECOND_TABLE);
-                        
-                        List<string> joinSelectProjection = new List<string>();
-
-                        // Don t apply for '*', select anything (use <key,value> and need to make other projection for '*')
-                        if (sqlQuery.SELECT_JOIN_PROJECTION.Count() > 1) {
-                            foreach (var projection in sqlQuery.SELECT_JOIN_PROJECTION) {
-                                if (projection.Key == sqlQuery.SELECT_JOIN_FIRST_TABLE) {
-                                    foreach (string key in joinSelectFirstTableStructure) {
-                                        if (projection.Value == key) {
-                                            joinSelectProjection.Add(projection.Value);
-                                        }
-                                    }
-                                } else if (projection.Key == sqlQuery.SELECT_JOIN_SECOND_TABLE) {
-                                    foreach (string key in joinSelectSecondTableStructure) {
-                                        if (projection.Value == key) {
-                                            joinSelectProjection.Add(projection.Value);
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            send(new Message(MessageAction.ERROR, "Nu s-au selectat atributele."));
-                            return;
-                        }
-
-                        string joinMessage = "";
-                        joinMessage += string.Join(",", joinSelectProjection);
-                        joinMessage += ":";
-
-                        List<string> joinData = new List<string>();
-
-                        // Tables needs to be given in order. First the table with primary key and than the second table that refer to it.
-                        
-                        joinData = indexedNestedLoopsAlgorithm(sqlQuery.SELECT_JOIN_PROJECTION, sqlQuery.SELECT_JOIN_FIRST_TABLE, sqlQuery.SELECT_JOIN_SECOND_TABLE, sqlQuery.SELECT_JOIN_SELECTION);
-                        //joinData = sortMergeAlgorithm(sqlQuery.SELECT_JOIN_PROJECTION, sqlQuery.SELECT_JOIN_FIRST_TABLE, sqlQuery.SELECT_JOIN_SECOND_TABLE, sqlQuery.SELECT_JOIN_SELECTION);
-
-                        if (joinData.Count() > 0) {
-                            joinMessage += string.Join("^", joinData);
-                        } else {
-                            joinMessage = "NO_RESULTS";
-                        }
-
-                        send(new Message(MessageAction.SUCCESS_SELECT, joinMessage));
                         return;
 
                     default:
@@ -1652,7 +1370,7 @@ namespace Server {
                         case "inner":
                             if (selectReplacedStatement.Contains("FROM", StringComparison.OrdinalIgnoreCase)) {
                                 if (matches.Count() > 0) {
-                                    List<KeyValuePair<string, string>> projection = new List<KeyValuePair<string, string>>();
+                                    List<KeyValuePair<string,string>> projection = new List<KeyValuePair<string, string>>();
 
                                     string[] attributes = matches[0].Split(",", StringSplitOptions.TrimEntries); // Watch out for the attributes to be split by ",".
                                     foreach (string attribute in attributes) {
@@ -1668,7 +1386,7 @@ namespace Server {
                                     selection.Add(firstSelection);
                                     selection.Add(secondSelection);
 
-                                    sqlQuery = new SQLQuery(SQLQueryType.JOIN);
+                                    sqlQuery = new SQLQuery(SQLQueryType.SELECT);
                                     sqlQuery.SELECT_JOIN_PROJECTION = projection;
                                     sqlQuery.SELECT_JOIN_FIRST_TABLE = selectReplacedArgs[3];
                                     sqlQuery.SELECT_JOIN_SECOND_TABLE = selectReplacedArgs[6];
