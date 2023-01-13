@@ -16,9 +16,9 @@ INSERT INTO disciplines (DiscID, DName, CreditNr) VALUES ('C', 'Calculator', 6);
 CREATE TABLE specialization (SpecID VARCHAR(5) PRIMARY KEY, SpecName VARCHAR(40), Language VARCHAR(20));
 
 INSERT INTO specialization (SpecID, SpecName, Language) VALUES ('I', 'Informatics', 'English');
-INSERT INTO specialization (SpecID, SpecName, Language) VALUES ('MI', 'Maths', 'English');
+INSERT INTO specialization (SpecID, SpecName, Language) VALUES ('MJ', 'Maths', 'English');
 INSERT INTO specialization (SpecID, SpecName, Language) VALUES ('S', 'Sport', 'Deutch');
-INSERT INTO specialization (SpecID, SpecName, Language) VALUES ('MJ', 'Michael Jackson', 'English');
+INSERT INTO specialization (SpecID, SpecName, Language) VALUES ('MF', 'Michael Jackson', 'English');
 
 
 # Groups
@@ -26,7 +26,7 @@ CREATE TABLE groups (GroupID INT PRIMARY KEY, SpecID VARCHAR(20) REFERENCES spec
 
 INSERT INTO groups (GroupID, SpecID) VALUES (531, 'I');
 INSERT INTO groups (GroupID, SpecID) VALUES (532, 'I');
-INSERT INTO groups (GroupID, SpecID) VALUES (631, 'MI'); # MI does not exist in 'specialization'
+INSERT INTO groups (GroupID, SpecID) VALUES (631, 'MJ'); # MI does not exist in 'specialization'
 
 
 # Students
@@ -66,7 +66,7 @@ SELECT DISTINCT GroupID FROM students;
 SELECT DName, CreditNr FROM disciplines;
 
 SELECT DName, CreditNr FROM disciplines WHERE CreditNr = 6;
-SELECT DiscID, DName FROM disciplines WHERE CreditNr > 1;
+SELECT DiscID, DName FROM disciplines WHERE CreditNr > 6;
 SELECT CreditNr FROM disciplines WHERE CreditNr > 1 AND DName = 'Databases 1';
 
 SELECT Mark FROM marks WHERE DiscID = 'DB1';

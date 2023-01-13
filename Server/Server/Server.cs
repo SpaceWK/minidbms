@@ -465,30 +465,34 @@ namespace Server {
 
             List<Record> firstTableRecords = mongoDBService.getAll(currentDatabase, firstTable);
             List<Record> secondTableRecords = mongoDBService.getAll(currentDatabase, secondTable);
-            string idxTableName = "idx_" + secondTable + "_" + tablePK;
-            List<Record> idxSecondTableRecords = mongoDBService.getAll(currentDatabase, idxTableName);
-            var idxSecondTableRecordsSorted = idxSecondTableRecords.OrderBy(x => x.key);
             var firstTableRecordsSorted = firstTableRecords.OrderBy(x => x.key);
             var secondTableRecordsSorted = secondTableRecords.OrderBy(x => x.key);
             Dictionary<Record, Record> finalRecords = new Dictionary<Record, Record>();
+            int firstContor = 0, secondContor = 0;
 
-            if (firstTableRecords.Count() > 0) {
-                foreach (Record firstTableRecord in firstTableRecordsSorted) {
-                    foreach (Record idxSecondTableRecord in idxSecondTableRecordsSorted) {
-                        if (firstTableRecord.key == idxSecondTableRecord.key) {
-                            string[] idxSecondTableValues = idxSecondTableRecord.value.Split('#');
-                            Array.Sort(idxSecondTableValues);
-                            for(int i = 0; i < idxSecondTableValues.Length; i++) {
-                                foreach(Record secondTableRecord in secondTableRecordsSorted) {
-                                    if (secondTableRecord.key == idxSecondTableValues[i]) {
-                                        finalRecords.Add(secondTableRecord, firstTableRecord);
-                                        break;
-                                    }
-                                }
-                            }
+            foreach(Record firstRecord in firstTableRecordsSorted)
+            {
+                foreach(Record secondRecord in secondTableRecordsSorted)
+                {
+                    if (firstContor == secondContor)
+                    {
+                        if (secondRecord.key.Contains(firstRecord.key))
+                        {
+                            finalRecords.Add(secondRecord, firstRecord);
+                            firstContor++;
+                        }
+                        else if (secondRecord.value.Contains(firstRecord.key))
+                        {
+                            finalRecords.Add(secondRecord, firstRecord);
+                            firstContor++;
+                        }
+                        else
+                        {
+                            secondContor = 0;
                             break;
                         }
                     }
+                    secondContor++;
                 }
             }
 
@@ -957,7 +961,7 @@ namespace Server {
                             //rnd = new Random();
                             //int[] credits = { 5, 6, 7 };
 
-                            //for (int i = 0; i < 1000; i++) {
+                            //for (int i = 0; i < 1000000; i++) {
                             //    int random = credits[rnd.Next(0, 3)];
                             //    KeyValuePair<string, string> kv = new KeyValuePair<string, string>("D" + i, "Database " + i + "#" + random);
                             //    KeyValuePair<string, string> kv1 = new KeyValuePair<string, string>("D" + i, random.ToString());
@@ -1335,8 +1339,8 @@ namespace Server {
 
                         // Tables needs to be given in order. First the table with primary key and than the second table that refer to it.
                         
-                        joinData = indexedNestedLoopsAlgorithm(sqlQuery.SELECT_JOIN_PROJECTION, sqlQuery.SELECT_JOIN_FIRST_TABLE, sqlQuery.SELECT_JOIN_SECOND_TABLE, sqlQuery.SELECT_JOIN_SELECTION);
-                        //joinData = sortMergeAlgorithm(sqlQuery.SELECT_JOIN_PROJECTION, sqlQuery.SELECT_JOIN_FIRST_TABLE, sqlQuery.SELECT_JOIN_SECOND_TABLE, sqlQuery.SELECT_JOIN_SELECTION);
+                        //joinData = indexedNestedLoopsAlgorithm(sqlQuery.SELECT_JOIN_PROJECTION, sqlQuery.SELECT_JOIN_FIRST_TABLE, sqlQuery.SELECT_JOIN_SECOND_TABLE, sqlQuery.SELECT_JOIN_SELECTION);
+                        joinData = sortMergeAlgorithm(sqlQuery.SELECT_JOIN_PROJECTION, sqlQuery.SELECT_JOIN_FIRST_TABLE, sqlQuery.SELECT_JOIN_SECOND_TABLE, sqlQuery.SELECT_JOIN_SELECTION);
 
                         if (joinData.Count() > 0) {
                             joinMessage += string.Join("^", joinData);
